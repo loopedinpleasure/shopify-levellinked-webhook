@@ -236,9 +236,11 @@ class ShopifyDiscordBot {
                 });
             }
 
-            // Schedule auto-DM if eligible
+            // Schedule auto-DM if eligible (DISABLED BY DEFAULT)
             if (!hasClosedDms && config.features.autoDm.enabled) {
-                this.scheduleAutoDM(member.user.id);
+                // Auto-DM scheduling is DISABLED by default for safety
+                console.log(`⏰ Auto-DM scheduled for user ${member.user.id} but system is DISABLED by default`);
+                // this.scheduleAutoDM(member.user.id); // COMMENTED OUT FOR SAFETY
             }
 
             // Record analytics
@@ -420,10 +422,24 @@ class ShopifyDiscordBot {
         console.log('📅 Daily (2:00 AM) and weekly (Monday 2:00 AM) summaries scheduled');
     }
 
-    // Start auto-DM processor
+    // Start auto-DM processor (DISABLED BY DEFAULT)
     startAutoDMProcessor() {
+        // Auto-DM processor is DISABLED by default for safety
+        // Only runs when explicitly enabled via admin panel
+        console.log('⚠️ Auto-DM processor is DISABLED by default for safety');
+        console.log('📧 Use the "Toggle Auto-DM" button to enable when ready');
+        
+        // Check every 5 minutes if auto-DM is enabled
         setInterval(async () => {
             try {
+                // Check if auto-DM is enabled in settings
+                const setting = await db.get('SELECT value FROM settings WHERE key = ?', ['auto_dm_enabled']);
+                const isEnabled = setting && setting.value === 'true';
+                
+                if (!isEnabled) {
+                    return; // Skip if not enabled
+                }
+                
                 const eligibleMembers = await db.getMembersForAutoDM();
                 
                 for (const member of eligibleMembers.slice(0, config.features.autoDm.maxPerHour)) {
@@ -437,7 +453,7 @@ class ShopifyDiscordBot {
                     await this.logger.logError(error, 'Auto-DM processor');
                 }
             }
-        }, 60000); // Check every minute
+        }, 300000); // Check every 5 minutes instead of every minute
     }
 
     // Handle button interactions
@@ -455,6 +471,12 @@ class ShopifyDiscordBot {
             }
 
             switch (customId) {
+                case 'toggle_orders':
+                    await this.handleToggleOrders(interaction);
+                    break;
+                case 'toggle_auto_dm':
+                    await this.handleToggleAutoDM(interaction);
+                    break;
                 case 'health_check':
                     await this.handleHealthCheck(interaction);
                     break;
@@ -463,6 +485,21 @@ class ShopifyDiscordBot {
                     break;
                 case 'init_database':
                     await this.handleDatabaseInit(interaction);
+                    break;
+                case 'test_auto_dm':
+                    await this.handleTestAutoDM(interaction);
+                    break;
+                case 'create_embed_template':
+                    await this.handleCreateTemplate(interaction);
+                    break;
+                case 'custom_channel_message':
+                    await this.handleCustomChannelMessage(interaction);
+                    break;
+                case 'dm_single_user':
+                    await this.handleDMSingleUser(interaction);
+                    break;
+                case 'export_ai_data':
+                    await this.handleExportAIData(interaction);
                     break;
                 default:
                     await interaction.reply({ 
@@ -523,6 +560,129 @@ class ShopifyDiscordBot {
         }
     }
 
+    // Handle toggle orders
+    async handleToggleOrders(interaction) {
+        try {
+            // Get current setting
+            const currentSetting = await db.get('SELECT value FROM settings WHERE key = ?', ['orders_enabled']);
+            const newValue = currentSetting ? (currentSetting.value === 'true' ? 'false' : 'true') : 'true';
+            
+            // Update setting
+            await db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ['orders_enabled', newValue]);
+            
+            const status = newValue === 'true' ? '✅ ENABLED' : '❌ DISABLED';
+            await interaction.reply({ 
+                content: `🛍️ Order notifications: **${status}**`, 
+                ephemeral: true 
+            });
+
+            // Log the change
+            if (this.logger) {
+                await this.logger.sendStatusUpdate('Orders Toggled', `Order notifications ${newValue === 'true' ? 'enabled' : 'disabled'}`, newValue === 'true' ? '#00ff00' : '#ff0000');
+            }
+
+        } catch (error) {
+            console.error('❌ Toggle orders error:', error);
+            await interaction.reply({ 
+                content: '❌ Failed to toggle orders.', 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Handle toggle auto-DM
+    async handleToggleAutoDM(interaction) {
+        try {
+            // Get current setting
+            const currentSetting = await db.get('SELECT value FROM settings WHERE key = ?', ['auto_dm_enabled']);
+            const newValue = currentSetting ? (currentSetting.value === 'true' ? 'false' : 'true') : 'true';
+            
+            // Update setting
+            await db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ['auto_dm_enabled', newValue]);
+            
+            const status = newValue === 'true' ? '✅ ENABLED' : '❌ DISABLED';
+            await interaction.reply({ 
+                content: `⏰ Auto-DM system: **${status}**`, 
+                ephemeral: true 
+            });
+
+            // Log the change
+            if (this.logger) {
+                await this.logger.sendStatusUpdate('Auto-DM Toggled', `Auto-DM system ${newValue === 'true' ? 'enabled' : 'disabled'}`, newValue === 'true' ? '#00ff00' : '#ff0000');
+            }
+
+        } catch (error) {
+            console.error('❌ Toggle auto-DM error:', error);
+            await interaction.reply({ 
+                content: '❌ Failed to toggle auto-DM.', 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Handle custom channel message
+    async handleCustomChannelMessage(interaction) {
+        try {
+            await interaction.reply({ 
+                content: '📝 Custom channel message feature coming soon! This will let you send custom embeds to any channel.', 
+                ephemeral: true 
+            });
+
+            // TODO: Implement modal form for message input
+            // TODO: Add channel selection
+            // TODO: Add embed designer
+
+        } catch (error) {
+            console.error('❌ Custom channel message error:', error);
+            await interaction.reply({ 
+                content: '❌ Feature not ready yet.', 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Handle test auto-DM
+    async handleTestAutoDM(interaction) {
+        try {
+            await interaction.reply({ 
+                content: '📧 Sending test welcome DM...', 
+                ephemeral: true 
+            });
+
+            // Create welcome DM with new embed
+            const { createWelcomeDMEmbed, createOptOutButton } = require('./discord/embeds');
+            const welcomeEmbed = createWelcomeDMEmbed();
+
+            // Send test DM to the user who clicked
+            await interaction.user.send({
+                embeds: [welcomeEmbed],
+                components: [createOptOutButton()]
+            });
+
+            await interaction.editReply({ 
+                content: '✅ Test welcome DM sent successfully! Check your DMs.', 
+                ephemeral: true 
+            });
+
+            // Log the test
+            if (this.logger) {
+                await this.logger.logDM(interaction.user.id, interaction.user.tag, 'Test Sent', {
+                    type: 'Test Auto-DM (Welcome)'
+                });
+            }
+
+        } catch (error) {
+            console.error('❌ Test auto-DM error:', error);
+            if (this.logger) {
+                await this.logger.logError(error, 'Test auto-DM');
+            }
+            await interaction.editReply({ 
+                content: `❌ Failed to send test DM: ${error.message}`, 
+                ephemeral: true 
+            });
+        }
+    }
+
     // Handle database initialization
     async handleDatabaseInit(interaction) {
         try {
@@ -555,6 +715,68 @@ class ShopifyDiscordBot {
             }
             await interaction.editReply({ 
                 content: `❌ Database initialization failed: ${error.message}`, 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Handle DM single user
+    async handleDMSingleUser(interaction) {
+        try {
+            await interaction.reply({ 
+                content: '👤 DM single user feature coming soon! This will let you send custom messages to specific users.', 
+                ephemeral: true 
+            });
+
+            // TODO: Implement user selection modal
+            // TODO: Add message input form
+            // TODO: Add template selection
+
+        } catch (error) {
+            console.error('❌ DM single user error:', error);
+            await interaction.reply({ 
+                content: '❌ Feature not ready yet.', 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Handle create embed template
+    async handleCreateTemplate(interaction) {
+        try {
+            await interaction.reply({ 
+                content: '🖼️ Embed template feature coming soon! This will let you create reusable embed templates.', 
+                ephemeral: true 
+            });
+
+            // TODO: Implement modal form for template input
+            // TODO: Add template name
+            // TODO: Add embed designer
+
+        } catch (error) {
+            console.error('❌ Embed template error:', error);
+            await interaction.reply({ 
+                content: '❌ Feature not ready yet.', 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Handle export AI data
+    async handleExportAIData(interaction) {
+        try {
+            await interaction.reply({ 
+                content: '📊 Export AI data feature coming soon! This will let you export all AI-related data to a CSV file.', 
+                ephemeral: true 
+            });
+
+            // TODO: Implement modal for data selection
+            // TODO: Add file download
+
+        } catch (error) {
+            console.error('❌ Export AI data error:', error);
+            await interaction.reply({ 
+                content: '❌ Feature not ready yet.', 
                 ephemeral: true 
             });
         }
