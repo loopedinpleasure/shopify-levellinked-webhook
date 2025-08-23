@@ -3,8 +3,9 @@ const config = require('../config');
 const db = require('../database/db');
 
 class ShopifyWebhooks {
-    constructor(client) {
+    constructor(client, logger) {
         this.client = client;
+        this.logger = logger;
         this.webhookSecret = config.shopify.webhookSecret;
     }
 
@@ -21,6 +22,9 @@ class ShopifyWebhooks {
             );
         } catch (error) {
             console.error('Webhook verification error:', error);
+            if (this.logger) {
+                this.logger.logError(error, 'Webhook verification');
+            }
             return false;
         }
     }
@@ -55,6 +59,9 @@ class ShopifyWebhooks {
             console.log('✅ Order processed successfully');
         } catch (error) {
             console.error('❌ Error processing order:', error);
+            if (this.logger) {
+                await this.logger.logError(error, 'Order processing');
+            }
             throw error;
         }
     }
@@ -86,8 +93,16 @@ class ShopifyWebhooks {
                 console.warn('❌ Notification channel not found');
             }
 
+            // Log order processing
+            if (this.logger) {
+                await this.logger.logOrder(orderData, product, category);
+            }
+
         } catch (error) {
             console.error('❌ Error processing line item:', error);
+            if (this.logger) {
+                await this.logger.logError(error, 'Line item processing');
+            }
         }
     }
 
@@ -158,6 +173,9 @@ class ShopifyWebhooks {
 
         } catch (error) {
             console.error('❌ Error categorizing product:', error);
+            if (this.logger) {
+                await this.logger.logError(error, 'Product categorization');
+            }
             // Return general category as fallback
             return {
                 name: 'General',
@@ -185,6 +203,9 @@ class ShopifyWebhooks {
             // Verify webhook signature
             if (!this.verifyWebhook(body, signature)) {
                 console.warn('❌ Webhook signature verification failed');
+                if (this.logger) {
+                    await this.logger.logError(new Error('Invalid webhook signature'), 'Webhook security');
+                }
                 return { success: false, error: 'Invalid signature' };
             }
 
@@ -198,27 +219,41 @@ class ShopifyWebhooks {
                         await this.handleOrderCreated(body);
                     } else {
                         console.log(`⏳ Order ${body.order_number} not paid yet (${body.financial_status})`);
+                        if (this.logger) {
+                            await this.logger.sendStatusUpdate('Order Pending', `Order ${body.order_number} received but not yet paid (${body.financial_status})`, '#ffff00');
+                        }
                     }
                     break;
 
                 case 'orders/fulfilled':
                     console.log(`✅ Order ${body.order_number} fulfilled`);
-                    // Could add fulfillment notifications here
+                    if (this.logger) {
+                        await this.logger.sendStatusUpdate('Order Fulfilled', `Order ${body.order_number} has been fulfilled`, '#00ff00');
+                    }
                     break;
 
                 case 'products/create':
                 case 'products/update':
                     console.log(`📦 Product ${body.title} ${topic.includes('create') ? 'created' : 'updated'}`);
+                    if (this.logger) {
+                        await this.logger.sendStatusUpdate('Product Update', `Product ${body.title} ${topic.includes('create') ? 'created' : 'updated'}`, '#4169e1');
+                    }
                     break;
 
                 default:
                     console.log(`ℹ️ Unhandled webhook topic: ${topic}`);
+                    if (this.logger) {
+                        await this.logger.sendStatusUpdate('Unhandled Webhook', `Received webhook topic: ${topic}`, '#ffa500');
+                    }
             }
 
             return { success: true };
 
         } catch (error) {
             console.error('❌ Webhook processing error:', error);
+            if (this.logger) {
+                await this.logger.logError(error, 'Webhook processing');
+            }
             return { success: false, error: error.message };
         }
     }
@@ -240,6 +275,9 @@ class ShopifyWebhooks {
                 database: true
             };
         } catch (error) {
+            if (this.logger) {
+                await this.logger.logError(error, 'Health check');
+            }
             return {
                 status: 'unhealthy',
                 error: error.message,
