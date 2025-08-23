@@ -49,11 +49,7 @@ function createPrimaryPlatformEmbed() {
             new ButtonBuilder()
                 .setCustomId('dm_single_user')
                 .setLabel('👤 DM User')
-                .setStyle(ButtonStyle.Success),
-            new ButtonBuilder()
-                .setCustomId('dm_all_members')
-                .setLabel('📢 DM Everyone')
-                .setStyle(ButtonStyle.Danger)
+                .setStyle(ButtonStyle.Success)
         );
 
     const managementButtons = new ActionRowBuilder()
@@ -77,11 +73,6 @@ function createPrimaryPlatformEmbed() {
 
     const additionalButtons = new ActionRowBuilder()
         .addComponents(
-            new ButtonBuilder()
-                .setCustomId('manage_categories')
-                .setLabel('🏷️ Categories')
-                .setEmoji('🏷️')
-                .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('export_ai_data')
                 .setLabel('🤖 Export for AI')
