@@ -232,7 +232,7 @@ class DatabaseInitializer {
         const defaultSettings = [
             ['orders_enabled', 'true'],
             ['reviews_enabled', 'false'],
-            ['auto_dm_enabled', 'true'],
+            ['auto_dm_enabled', 'false'], // DISABLED BY DEFAULT FOR SAFETY
             ['engagement_enabled', 'true'],
             ['analytics_enabled', 'true'],
             ['dm_delay_minutes', '65'],
