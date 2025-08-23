@@ -66,7 +66,7 @@ class ShopifyWebhooks {
         }
     }
 
-    // Process individual line items
+    // Process order line item and send notification
     async processOrderLineItem(orderData, lineItem) {
         try {
             // Get product details
@@ -78,19 +78,30 @@ class ShopifyWebhooks {
                 product_id: lineItem.product_id
             };
 
-            // Categorize product
-            const category = await this.categorizeProduct(lineItem);
+            // Get category for product
+            const category = await this.getProductCategory(product);
 
             // Create order notification
-            const embed = await this.createOrderNotification(orderData, product, category);
+            const { createOrderEmbed, getOrderReactions } = require('../discord/embeds');
+            const embed = await createOrderEmbed(orderData, product, category);
 
-            // Send to Discord notification channel
+            // Send notification to channel
             const channel = this.client.channels.cache.get(config.discord.notificationChannelId);
             if (channel) {
-                await channel.send({ embeds: [embed] });
-                console.log(`📢 Order notification sent for ${product.name}`);
-            } else {
-                console.warn('❌ Notification channel not found');
+                const message = await channel.send({ embeds: [embed] });
+                
+                // Add automatic reactions after 15 seconds
+                setTimeout(async () => {
+                    try {
+                        const reactions = getOrderReactions();
+                        for (const reaction of reactions) {
+                            await message.react(reaction);
+                        }
+                        console.log(`✅ Added ${reactions.length} reactions to order notification`);
+                    } catch (error) {
+                        console.error('❌ Failed to add reactions:', error);
+                    }
+                }, 15000); // 15 second delay
             }
 
             // Log order processing
@@ -98,10 +109,12 @@ class ShopifyWebhooks {
                 await this.logger.logOrder(orderData, product, category);
             }
 
+            console.log(`✅ Order notification sent for ${product.name}`);
+
         } catch (error) {
-            console.error('❌ Error processing line item:', error);
+            console.error('❌ Error processing order line item:', error);
             if (this.logger) {
-                await this.logger.logError(error, 'Line item processing');
+                await this.logger.logError(error, 'Order line item processing');
             }
         }
     }
