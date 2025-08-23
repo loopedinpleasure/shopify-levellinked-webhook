@@ -509,11 +509,50 @@ class ShopifyDiscordBot {
                 case 'send_template':
                     await this.handleSendTemplate(interaction);
                     break;
+                case 'send_to_channel':
+                    await this.handleSendToChannel(interaction);
+                    break;
+                case 'dont_send_message':
+                    await this.handleDontSendMessage(interaction);
+                    break;
+                case 'dont_send_dm':
+                    await this.handleDontSendDM(interaction);
+                    break;
+                case 'send_to_members':
+                    await this.handleSendToMembers(interaction);
+                    break;
+                case 'back_to_destination':
+                    await this.handleSendTemplate(interaction);
+                    break;
+                case 'back_to_templates_channel':
+                    await this.handleSendToChannel(interaction);
+                    break;
+                case 'back_to_templates_members':
+                    await this.handleSendToMembers(interaction);
+                    break;
+                case 'change_template_channel':
+                    await this.handleSendToChannel(interaction);
+                    break;
+                case 'change_template_members':
+                    await this.handleSendToMembers(interaction);
+                    break;
                 default:
-                    await interaction.reply({ 
-                        content: '⚠️ This feature is not implemented yet.', 
-                        ephemeral: true 
-                    });
+                    if (customId.startsWith('select_template_')) {
+                        await this.handleTemplateSelection(interaction, customId);
+                    } else if (customId.startsWith('confirm_send_')) {
+                        await this.handleConfirmSend(interaction, customId);
+                    } else if (customId.startsWith('delete_template_')) {
+                        await this.handleDeleteTemplate(interaction, customId);
+                    } else if (customId.startsWith('send_message_')) {
+                        await this.handleSendMessage(interaction, customId);
+                    } else if (customId.startsWith('send_dm_')) {
+                        await this.handleSendDM(interaction, customId);
+                    } else {
+                        await interaction.reply({ 
+                            content: '⚠️ This feature is not implemented yet.', 
+                            ephemeral: true 
+                        });
+                    }
             }
 
         } catch (error) {
@@ -631,19 +670,31 @@ class ShopifyDiscordBot {
     // Handle custom channel message
     async handleCustomChannelMessage(interaction) {
         try {
-            await interaction.reply({ 
-                content: '📝 Custom channel message feature coming soon! This will let you send custom embeds to any channel.', 
-                ephemeral: true 
-            });
+            // Create the modal for message input
+            const modal = new ModalBuilder()
+                .setCustomId('custom_message_modal')
+                .setTitle('📝 Send Message to Notification Channel');
 
-            // TODO: Implement modal form for message input
-            // TODO: Add channel selection
-            // TODO: Add embed designer
+            // Message text input
+            const messageInput = new TextInputBuilder()
+                .setCustomId('message_text')
+                .setLabel('Message Text')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('Type your message here...')
+                .setRequired(true)
+                .setMaxLength(2000);
+
+            // Add input to modal
+            const actionRow = new ActionRowBuilder().addComponents(messageInput);
+            modal.addComponents(actionRow);
+
+            // Show the modal
+            await interaction.showModal(modal);
 
         } catch (error) {
-            console.error('❌ Custom channel message error:', error);
+            console.error('❌ Custom channel message modal error:', error);
             await interaction.reply({ 
-                content: '❌ Feature not ready yet.', 
+                content: '❌ Failed to open message modal.', 
                 ephemeral: true 
             });
         }
@@ -731,19 +782,42 @@ class ShopifyDiscordBot {
     // Handle DM single user
     async handleDMSingleUser(interaction) {
         try {
-            await interaction.reply({ 
-                content: '👤 DM single user feature coming soon! This will let you send custom messages to specific users.', 
-                ephemeral: true 
-            });
+            // Create the modal for user selection and message input
+            const modal = new ModalBuilder()
+                .setCustomId('dm_single_user_modal')
+                .setTitle('👤 Send DM to Single User');
 
-            // TODO: Implement user selection modal
-            // TODO: Add message input form
-            // TODO: Add template selection
+            // User ID input
+            const userIdInput = new TextInputBuilder()
+                .setCustomId('target_user_id')
+                .setLabel('User ID (Discord User ID)')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('e.g., 123456789012345678')
+                .setRequired(true)
+                .setMaxLength(20);
+
+            // Message text input
+            const messageInput = new TextInputBuilder()
+                .setCustomId('dm_message_text')
+                .setLabel('Message Text')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('Type your message here...')
+                .setRequired(true)
+                .setMaxLength(2000);
+
+            // Add inputs to modal
+            const firstActionRow = new ActionRowBuilder().addComponents(userIdInput);
+            const secondActionRow = new ActionRowBuilder().addComponents(messageInput);
+
+            modal.addComponents(firstActionRow, secondActionRow);
+
+            // Show the modal
+            await interaction.showModal(modal);
 
         } catch (error) {
-            console.error('❌ DM single user error:', error);
+            console.error('❌ DM single user modal error:', error);
             await interaction.reply({ 
-                content: '❌ Feature not ready yet.', 
+                content: '❌ Failed to open DM modal.', 
                 ephemeral: true 
             });
         }
@@ -852,6 +926,12 @@ class ShopifyDiscordBot {
                 case 'create_template_modal':
                     await this.handleCreateTemplateSubmit(interaction);
                     break;
+                case 'custom_message_modal':
+                    await this.handleCustomMessageSubmit(interaction);
+                    break;
+                case 'dm_single_user_modal':
+                    await this.handleDMSingleUserSubmit(interaction);
+                    break;
                 default:
                     await interaction.reply({ 
                         content: '⚠️ Unknown modal submission.', 
@@ -930,6 +1010,329 @@ class ShopifyDiscordBot {
         }
     }
 
+    // Handle custom message modal submission
+    async handleCustomMessageSubmit(interaction) {
+        try {
+            // Extract message text
+            const messageText = interaction.fields.getTextInputValue('message_text');
+            
+            // Create preview embed in control panel
+            const previewEmbed = new EmbedBuilder()
+                .setTitle('📝 Message Preview')
+                .setDescription('**Your message will be sent to the notification channel:**')
+                .addFields({
+                    name: '📄 Message Content',
+                    value: messageText,
+                    inline: false
+                })
+                .setColor('#36393f')
+                .setTimestamp();
+
+            // Create action buttons
+            const actionButtons = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`send_message_${Buffer.from(messageText).toString('base64').substring(0, 50)}`)
+                        .setLabel('✅ Send Message')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId('dont_send_message')
+                        .setLabel('❌ Don\'t Send')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+            // Store message for later sending
+            interaction.pendingMessage = messageText;
+
+            // Send preview with buttons
+            await interaction.reply({
+                embeds: [previewEmbed],
+                components: [actionButtons],
+                ephemeral: true
+            });
+
+        } catch (error) {
+            console.error('❌ Custom message submission error:', error);
+            await interaction.reply({ 
+                content: `❌ Failed to process message: ${error.message}`, 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Handle send message button
+    async handleSendMessage(interaction, customId) {
+        try {
+            // Get pending message from interaction
+            const messageText = interaction.pendingMessage;
+            
+            if (!messageText) {
+                await interaction.reply({
+                    content: '❌ No message to send. Please try again.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Get notification channel from config
+            const notificationChannel = this.client.channels.cache.get(config.discord.notificationChannelId);
+            
+            if (!notificationChannel) {
+                await interaction.reply({
+                    content: '❌ Notification channel not found. Please check your configuration.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Send the message to notification channel
+            await notificationChannel.send(messageText);
+
+            // Update the interaction to show success
+            await interaction.update({
+                content: '✅ **Message sent successfully to notification channel!**',
+                embeds: [],
+                components: []
+            });
+
+            // Log the message sending
+            if (this.logger) {
+                await this.logger.sendStatusUpdate('Message Sent', `Custom message sent to notification channel`, '#00ff00');
+            }
+
+        } catch (error) {
+            console.error('❌ Send message error:', error);
+            await interaction.reply({
+                content: `❌ Failed to send message: ${error.message}`,
+                ephemeral: true
+            });
+        }
+    }
+
+    // Handle don't send message button
+    async handleDontSendMessage(interaction) {
+        try {
+            // Update the interaction to show cancellation
+            await interaction.update({
+                content: '❌ **Message cancelled. Nothing was sent.**',
+                embeds: [],
+                components: []
+            });
+
+            // Clear pending message
+            interaction.pendingMessage = null;
+
+        } catch (error) {
+            console.error('❌ Don\'t send message error:', error);
+            await interaction.reply({
+                content: '❌ Failed to cancel message.',
+                ephemeral: true
+            });
+        }
+    }
+
+    // Handle DM single user modal submission
+    async handleDMSingleUserSubmit(interaction) {
+        try {
+            // Extract form data
+            const targetUserId = interaction.fields.getTextInputValue('target_user_id');
+            const messageText = interaction.fields.getTextInputValue('dm_message_text');
+            
+            // Validate user ID format
+            if (!/^\d{17,20}$/.test(targetUserId)) {
+                await interaction.reply({
+                    content: '❌ Invalid User ID format. Please enter a valid Discord User ID (17-20 digits).',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Try to fetch the user
+            let targetUser;
+            try {
+                targetUser = await this.client.users.fetch(targetUserId);
+            } catch (error) {
+                await interaction.reply({
+                    content: '❌ User not found. Please check the User ID and try again.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Check if user is in the server
+            const guild = this.client.guilds.cache.get(config.discord.guildId);
+            const member = await guild.members.fetch(targetUserId).catch(() => null);
+            
+            if (!member) {
+                await interaction.reply({
+                    content: '❌ User is not a member of this server.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Check if user has closed DMs role
+            if (member.roles.cache.has(config.discord.closedDmsRoleId)) {
+                await interaction.reply({
+                    content: '❌ Cannot send DM to this user - they have closed DMs enabled.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Create preview embed
+            const previewEmbed = new EmbedBuilder()
+                .setTitle('👤 DM Preview')
+                .setDescription('**Your message will be sent to this user:**')
+                .addFields(
+                    {
+                        name: '👤 Target User',
+                        value: `${targetUser.tag} (${targetUserId})`,
+                        inline: true
+                    },
+                    {
+                        name: '📄 Message Content',
+                        value: messageText,
+                        inline: false
+                    }
+                )
+                .setColor('#36393f')
+                .setTimestamp();
+
+            // Create action buttons
+            const actionButtons = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`send_dm_${targetUserId}_${Buffer.from(messageText).toString('base64').substring(0, 50)}`)
+                        .setLabel('✅ Send DM')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId('dont_send_dm')
+                        .setLabel('❌ Don\'t Send')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+            // Store data for later sending
+            interaction.pendingDM = {
+                userId: targetUserId,
+                username: targetUser.tag,
+                message: messageText
+            };
+
+            // Send preview with buttons
+            await interaction.reply({
+                embeds: [previewEmbed],
+                components: [actionButtons],
+                ephemeral: true
+            });
+
+        } catch (error) {
+            console.error('❌ DM single user submission error:', error);
+            await interaction.reply({ 
+                content: `❌ Failed to process DM request: ${error.message}`, 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Handle send DM button
+    async handleSendDM(interaction, customId) {
+        try {
+            // Get pending DM data from interaction
+            const pendingDM = interaction.pendingDM;
+            
+            if (!pendingDM) {
+                await interaction.reply({
+                    content: '❌ No DM data to send. Please try again.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Try to send the DM
+            try {
+                const targetUser = await this.client.users.fetch(pendingDM.userId);
+                await targetUser.send(pendingDM.message);
+                
+                // Update the interaction to show success
+                await interaction.update({
+                    content: `✅ **DM sent successfully to ${pendingDM.username}!**`,
+                    embeds: [],
+                    components: []
+                });
+
+                // Log the DM sending
+                if (this.logger) {
+                    await this.logger.logDM(pendingDM.userId, pendingDM.username, 'Sent', {
+                        type: 'Manual DM',
+                        message: pendingDM.message.substring(0, 100) + (pendingDM.message.length > 100 ? '...' : '')
+                    });
+                }
+
+                // Record analytics
+                await db.recordEvent('dm_sent', 'manual');
+
+                console.log(`✅ DM sent to ${pendingDM.username} (${pendingDM.userId})`);
+
+            } catch (dmError) {
+                if (dmError.code === 50007) {
+                    // User has DMs disabled
+                    await interaction.update({
+                        content: `❌ **Failed to send DM to ${pendingDM.username}**\n\n**Reason:** User has DMs disabled for this server.`,
+                        embeds: [],
+                        components: []
+                    });
+                } else {
+                    // Other error
+                    await interaction.update({
+                        content: `❌ **Failed to send DM to ${pendingDM.username}**\n\n**Error:** ${dmError.message}`,
+                        embeds: [],
+                        components: []
+                    });
+                }
+
+                // Log the DM failure
+                if (this.logger) {
+                    await this.logger.logDM(pendingDM.userId, pendingDM.username, 'Failed', {
+                        type: 'Manual DM',
+                        error: dmError.message
+                    });
+                }
+
+                console.error(`❌ Failed to send DM to ${pendingDM.username}:`, dmError);
+            }
+
+        } catch (error) {
+            console.error('❌ Send DM error:', error);
+            await interaction.reply({
+                content: `❌ Failed to send DM: ${error.message}`,
+                ephemeral: true
+            });
+        }
+    }
+
+    // Handle don't send DM button
+    async handleDontSendDM(interaction) {
+        try {
+            // Update the interaction to show cancellation
+            await interaction.update({
+                content: '❌ **DM cancelled. Nothing was sent.**',
+                embeds: [],
+                components: []
+            });
+
+            // Clear pending DM data
+            interaction.pendingDM = null;
+
+        } catch (error) {
+            console.error('❌ Don\'t send DM error:', error);
+            await interaction.reply({
+                content: '❌ Failed to cancel DM.',
+                ephemeral: true
+            });
+        }
+    }
+
     // Handle template library
     async handleTemplateLibrary(interaction) {
         try {
@@ -980,20 +1383,383 @@ class ShopifyDiscordBot {
     // Handle send template
     async handleSendTemplate(interaction) {
         try {
+            // Get all templates from database
+            const templates = await db.all('SELECT * FROM embed_templates ORDER BY created_at DESC');
+            
+            if (templates.length === 0) {
+                await interaction.reply({
+                    content: '❌ No templates found. Create a template first using the 🎨 Create Template button!',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Create destination picker embed
+            const embed = new EmbedBuilder()
+                .setTitle('📤 Send Template - Step 1: Choose Destination')
+                .setDescription('Where would you like to send this template?')
+                .setColor('#36393f')
+                .addFields(
+                    { name: '📺 Channel', value: 'Send to a specific Discord channel', inline: true },
+                    { name: '👥 Members', value: 'Send to specific server members', inline: true }
+                )
+                .setTimestamp();
+
+            // Create destination buttons
+            const destinationButtons = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('send_to_channel')
+                        .setLabel('📺 Send to Channel')
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId('send_to_members')
+                        .setLabel('👥 Send to Members')
+                        .setStyle(ButtonStyle.Primary)
+                );
+
+            // Store templates in interaction for next step
+            interaction.templates = templates;
+
             await interaction.reply({
-                content: '📤 Send Template system coming soon! This will let you:\n\n1️⃣ Choose destination (channel/members)\n2️⃣ Select template from library\n3️⃣ Preview and confirm\n4️⃣ Send with safety checks',
+                embeds: [embed],
+                components: [destinationButtons],
                 ephemeral: true
             });
-
-            // TODO: Implement destination picker
-            // TODO: Implement template selection
-            // TODO: Implement preview and confirmation
-            // TODO: Implement sending system
 
         } catch (error) {
             console.error('❌ Send template error:', error);
             await interaction.reply({
-                content: '❌ Feature not ready yet.',
+                content: '❌ Failed to load templates.',
+                ephemeral: true
+            });
+        }
+    }
+
+    // Handle send to channel destination
+    async handleSendToChannel(interaction) {
+        try {
+            // Get templates from previous step
+            const templates = interaction.templates || [];
+            
+            if (templates.length === 0) {
+                await interaction.reply({
+                    content: '❌ No templates available. Please start over.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Create template selection embed
+            const embed = new EmbedBuilder()
+                .setTitle('📤 Send Template - Step 2: Select Template')
+                .setDescription('Choose which template to send:')
+                .setColor('#36393f')
+                .setTimestamp();
+
+            // Add template list
+            const templateList = templates.map((template, index) => {
+                const createdDate = new Date(template.created_at).toLocaleDateString();
+                return `${index + 1}. **${template.name}** (${createdDate})\n   └ ${template.title}`;
+            }).join('\n\n');
+
+            embed.addFields({
+                name: '📋 Available Templates',
+                value: templateList,
+                inline: false
+            });
+
+            // Create template selection buttons (max 5 per row)
+            const templateButtons = [];
+            for (let i = 0; i < templates.length; i += 5) {
+                const row = new ActionRowBuilder();
+                const rowTemplates = templates.slice(i, i + 5);
+                
+                rowTemplates.forEach((template, index) => {
+                    row.addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`select_template_${template.id}`)
+                            .setLabel(`${i + index + 1}`)
+                            .setStyle(ButtonStyle.Secondary)
+                    );
+                });
+                
+                templateButtons.push(row);
+            }
+
+            // Store templates and add back button
+            interaction.templates = templates;
+            interaction.destination = 'channel';
+
+            const backButton = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('back_to_destination')
+                        .setLabel('⬅️ Back to Destination')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+
+            await interaction.update({
+                embeds: [embed],
+                components: [...templateButtons, backButton]
+            });
+
+        } catch (error) {
+            console.error('❌ Send to channel error:', error);
+            await interaction.reply({
+                content: '❌ Failed to load templates.',
+                ephemeral: true
+            });
+        }
+    }
+
+    // Handle send to members destination
+    async handleSendToMembers(interaction) {
+        try {
+            // Get templates from previous step
+            const templates = interaction.templates || [];
+            
+            if (templates.length === 0) {
+                await interaction.reply({
+                    content: '❌ No templates available. Please start over.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Create template selection embed
+            const embed = new EmbedBuilder()
+                .setTitle('📤 Send Template - Step 2: Select Template')
+                .setDescription('Choose which template to send to members:')
+                .setColor('#36393f')
+                .setTimestamp();
+
+            // Add template list
+            const templateList = templates.map((template, index) => {
+                const createdDate = new Date(template.created_at).toLocaleDateString();
+                return `${index + 1}. **${template.name}** (${createdDate})\n   └ ${template.title}`;
+            }).join('\n\n');
+
+            embed.addFields({
+                name: '📋 Available Templates',
+                value: templateList,
+                inline: false
+            });
+
+            // Create template selection buttons (max 5 per row)
+            const templateButtons = [];
+            for (let i = 0; i < templates.length; i += 5) {
+                const row = new ActionRowBuilder();
+                const rowTemplates = templates.slice(i, i + 5);
+                
+                rowTemplates.forEach((template, index) => {
+                    row.addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`select_template_${template.id}`)
+                            .setLabel(`${i + index + 1}`)
+                            .setStyle(ButtonStyle.Secondary)
+                    );
+                });
+                
+                templateButtons.push(row);
+            }
+
+            // Store templates and add back button
+            interaction.templates = templates;
+            interaction.destination = 'members';
+
+            const backButton = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('back_to_destination')
+                        .setLabel('⬅️ Back to Destination')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+
+            await interaction.update({
+                embeds: [embed],
+                components: [...templateButtons, backButton]
+            });
+
+        } catch (error) {
+            console.error('❌ Send to members error:', error);
+            await interaction.reply({
+                content: '❌ Failed to load templates.',
+                ephemeral: true
+            });
+        }
+    }
+
+    // Handle template selection
+    async handleTemplateSelection(interaction, customId) {
+        try {
+            // Extract template ID from custom ID
+            const templateId = parseInt(customId.replace('select_template_', ''));
+            
+            // Get templates and destination from previous step
+            const templates = interaction.templates || [];
+            const destination = interaction.destination;
+            
+            if (templates.length === 0) {
+                await interaction.reply({
+                    content: '❌ No templates available. Please start over.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Find the selected template
+            const selectedTemplate = templates.find(t => t.id === templateId);
+            if (!selectedTemplate) {
+                await interaction.reply({
+                    content: '❌ Template not found. Please start over.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Create preview embed
+            const previewEmbed = new EmbedBuilder()
+                .setTitle(selectedTemplate.title)
+                .setDescription(selectedTemplate.description)
+                .setColor('#36393f')
+                .setTimestamp();
+
+            if (selectedTemplate.image_url) {
+                previewEmbed.setImage({ url: selectedTemplate.image_url });
+            }
+
+            if (selectedTemplate.footer_text) {
+                previewEmbed.setFooter({ text: selectedTemplate.footer_text });
+            }
+
+            // Create action buttons
+            const actionButtons = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`confirm_send_${templateId}_${destination}`)
+                        .setLabel('✅ Send Now')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId(`change_template_${destination}`)
+                        .setLabel('🔄 Change Template')
+                        .setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder()
+                        .setCustomId(`delete_template_${templateId}`)
+                        .setLabel('🗑️ Delete Template')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+            const backButton = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`back_to_templates_${destination}`)
+                        .setLabel('⬅️ Back to Templates')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+
+            // Store selected template for next step
+            interaction.selectedTemplate = selectedTemplate;
+
+            await interaction.update({
+                content: `📤 **Preview of "${selectedTemplate.name}"**\n\n**Destination:** ${destination === 'channel' ? '📺 Channel' : '👥 Members'}`,
+                embeds: [previewEmbed],
+                components: [actionButtons, backButton]
+            });
+
+        } catch (error) {
+            console.error('❌ Template selection error:', error);
+            await interaction.reply({
+                content: '❌ Failed to select template.',
+                ephemeral: true
+            });
+        }
+    }
+
+    // Handle confirm send
+    async handleConfirmSend(interaction, customId) {
+        try {
+            // Extract template ID and destination from custom ID
+            const parts = customId.replace('confirm_send_', '').split('_');
+            const templateId = parseInt(parts[0]);
+            const destination = parts[1];
+            
+            // Get selected template from previous step
+            const selectedTemplate = interaction.selectedTemplate;
+            
+            if (!selectedTemplate) {
+                await interaction.reply({
+                    content: '❌ No template selected. Please start over.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            if (destination === 'channel') {
+                // For channel sending, we'll need to implement channel selection
+                await interaction.update({
+                    content: '📺 **Channel Selection Coming Soon!**\n\nThis will let you choose which channel to send the template to.',
+                    embeds: [],
+                    components: []
+                });
+            } else if (destination === 'members') {
+                // For member sending, we'll need to implement member selection
+                await interaction.update({
+                    content: '👥 **Member Selection Coming Soon!**\n\nThis will let you choose which members to send the template to.',
+                    embeds: [],
+                    components: []
+                });
+            }
+
+            // Log the template usage
+            if (this.logger) {
+                await this.logger.sendStatusUpdate('Template Send Attempted', `Template "${selectedTemplate.name}" prepared for ${destination}`, '#00ff00');
+            }
+
+        } catch (error) {
+            console.error('❌ Confirm send error:', error);
+            await interaction.reply({
+                content: '❌ Failed to confirm send.',
+                ephemeral: true
+            });
+        }
+    }
+
+    // Handle delete template
+    async handleDeleteTemplate(interaction, customId) {
+        try {
+            // Extract template ID from custom ID
+            const templateId = parseInt(customId.replace('delete_template_', ''));
+            
+            // Get selected template from previous step
+            const selectedTemplate = interaction.selectedTemplate;
+            
+            if (!selectedTemplate) {
+                await interaction.reply({
+                    content: '❌ No template selected. Please start over.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Delete template from database
+            await db.run('DELETE FROM embed_templates WHERE id = ?', [templateId]);
+
+            // Log the deletion
+            if (this.logger) {
+                await this.logger.sendStatusUpdate('Template Deleted', `Template "${selectedTemplate.name}" removed`, '#ff0000');
+            }
+
+            await interaction.update({
+                content: `🗑️ **Template "${selectedTemplate.name}" deleted successfully!**\n\nReturn to the main menu to create new templates or send existing ones.`,
+                embeds: [],
+                components: []
+            });
+
+        } catch (error) {
+            console.error('❌ Delete template error:', error);
+            await interaction.reply({
+                content: '❌ Failed to delete template.',
                 ephemeral: true
             });
         }
