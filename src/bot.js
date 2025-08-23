@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+const { Client, GatewayIntentBits, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const express = require('express');
 const config = require('./config');
 const db = require('./database/db');
@@ -66,6 +66,8 @@ class ShopifyDiscordBot {
         this.client.on(Events.InteractionCreate, async (interaction) => {
             if (interaction.isButton()) {
                 await this.handleButtonInteraction(interaction);
+            } else if (interaction.isModalSubmit()) {
+                await this.handleModalSubmit(interaction);
             }
         });
     }
@@ -501,6 +503,12 @@ class ShopifyDiscordBot {
                 case 'export_ai_data':
                     await this.handleExportAIData(interaction);
                     break;
+                case 'template_library':
+                    await this.handleTemplateLibrary(interaction);
+                    break;
+                case 'send_template':
+                    await this.handleSendTemplate(interaction);
+                    break;
                 default:
                     await interaction.reply({ 
                         content: '⚠️ This feature is not implemented yet.', 
@@ -744,19 +752,72 @@ class ShopifyDiscordBot {
     // Handle create embed template
     async handleCreateTemplate(interaction) {
         try {
-            await interaction.reply({ 
-                content: '🖼️ Embed template feature coming soon! This will let you create reusable embed templates.', 
-                ephemeral: true 
-            });
+            // Create the modal for template creation
+            const modal = new ModalBuilder()
+                .setCustomId('create_template_modal')
+                .setTitle('🎨 Create Embed Template');
 
-            // TODO: Implement modal form for template input
-            // TODO: Add template name
-            // TODO: Add embed designer
+            // Template name input
+            const nameInput = new TextInputBuilder()
+                .setCustomId('template_name')
+                .setLabel('Template Name (for your reference)')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('e.g., Welcome Message, Product Announcement')
+                .setRequired(true)
+                .setMaxLength(50);
+
+            // Title input
+            const titleInput = new TextInputBuilder()
+                .setCustomId('template_title')
+                .setLabel('Title (displayed at top)')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('e.g., Welcome to Level Linked!')
+                .setRequired(true)
+                .setMaxLength(256);
+
+            // Description input
+            const descriptionInput = new TextInputBuilder()
+                .setCustomId('template_description')
+                .setLabel('Description (main content + links)')
+                .setStyle(TextInputStyle.Paragraph)
+                .setPlaceholder('e.g., Thanks for joining! Check out our latest products: https://levellinked.myshopify.com')
+                .setRequired(true)
+                .setMaxLength(4000);
+
+            // Image URL input (optional)
+            const imageInput = new TextInputBuilder()
+                .setCustomId('template_image')
+                .setLabel('Image URL (optional)')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('https://example.com/image.jpg')
+                .setRequired(false)
+                .setMaxLength(2000);
+
+            // Footer input (optional)
+            const footerInput = new TextInputBuilder()
+                .setCustomId('template_footer')
+                .setLabel('Footer Text (optional)')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('e.g., Level Linked - Premium Adult Toys')
+                .setRequired(false)
+                .setMaxLength(256);
+
+            // Add inputs to modal
+            const firstActionRow = new ActionRowBuilder().addComponents(nameInput);
+            const secondActionRow = new ActionRowBuilder().addComponents(titleInput);
+            const thirdActionRow = new ActionRowBuilder().addComponents(descriptionInput);
+            const fourthActionRow = new ActionRowBuilder().addComponents(imageInput);
+            const fifthActionRow = new ActionRowBuilder().addComponents(footerInput);
+
+            modal.addComponents(firstActionRow, secondActionRow, thirdActionRow, fourthActionRow, fifthActionRow);
+
+            // Show the modal
+            await interaction.showModal(modal);
 
         } catch (error) {
-            console.error('❌ Embed template error:', error);
+            console.error('❌ Create template modal error:', error);
             await interaction.reply({ 
-                content: '❌ Feature not ready yet.', 
+                content: '❌ Failed to open template creation modal.', 
                 ephemeral: true 
             });
         }
@@ -778,6 +839,162 @@ class ShopifyDiscordBot {
             await interaction.reply({ 
                 content: '❌ Feature not ready yet.', 
                 ephemeral: true 
+            });
+        }
+    }
+
+    // Handle modal submissions
+    async handleModalSubmit(interaction) {
+        try {
+            const { customId } = interaction;
+
+            switch (customId) {
+                case 'create_template_modal':
+                    await this.handleCreateTemplateSubmit(interaction);
+                    break;
+                default:
+                    await interaction.reply({ 
+                        content: '⚠️ Unknown modal submission.', 
+                        ephemeral: true 
+                    });
+            }
+
+        } catch (error) {
+            console.error('❌ Modal submission error:', error);
+            await interaction.reply({ 
+                content: '❌ An error occurred while processing your submission.', 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Handle create template modal submission
+    async handleCreateTemplateSubmit(interaction) {
+        try {
+            // Extract form data
+            const templateName = interaction.fields.getTextInputValue('template_name');
+            const templateTitle = interaction.fields.getTextInputValue('template_title');
+            const templateDescription = interaction.fields.getTextInputValue('template_description');
+            const templateImage = interaction.fields.getTextInputValue('template_image') || null;
+            const templateFooter = interaction.fields.getTextInputValue('template_footer') || null;
+
+            // Save template to database
+            await db.run(`
+                INSERT INTO embed_templates 
+                (name, template_type, title, description, image_url, footer_text, color, is_active, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+            `, [
+                templateName,
+                'custom', // template type
+                templateTitle,
+                templateDescription,
+                templateImage,
+                templateFooter,
+                '#36393f', // Discord gray color
+                true // is_active
+            ]);
+
+            // Create preview embed
+            const previewEmbed = new EmbedBuilder()
+                .setTitle(templateTitle)
+                .setDescription(templateDescription)
+                .setColor('#36393f') // Discord gray
+                .setTimestamp();
+
+            if (templateImage) {
+                previewEmbed.setImage({ url: templateImage });
+            }
+
+            if (templateFooter) {
+                previewEmbed.setFooter({ text: templateFooter });
+            }
+
+            // Send confirmation with preview
+            await interaction.reply({
+                content: `✅ Template **"${templateName}"** created successfully!`,
+                embeds: [previewEmbed],
+                ephemeral: true
+            });
+
+            // Log the template creation
+            if (this.logger) {
+                await this.logger.sendStatusUpdate('Template Created', `New template "${templateName}" saved`, '#00ff00');
+            }
+
+        } catch (error) {
+            console.error('❌ Template creation error:', error);
+            await interaction.reply({ 
+                content: `❌ Failed to create template: ${error.message}`, 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Handle template library
+    async handleTemplateLibrary(interaction) {
+        try {
+            // Get all templates from database
+            const templates = await db.all('SELECT * FROM embed_templates ORDER BY created_at DESC');
+            
+            if (templates.length === 0) {
+                await interaction.reply({
+                    content: '📚 No templates found. Create your first template using the 🎨 Create Template button!',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Create template list embed
+            const embed = new EmbedBuilder()
+                .setTitle('📚 Template Library')
+                .setDescription(`You have **${templates.length}** saved templates`)
+                .setColor('#36393f')
+                .setTimestamp();
+
+            // Add template list
+            const templateList = templates.map((template, index) => {
+                const createdDate = new Date(template.created_at).toLocaleDateString();
+                return `${index + 1}. **${template.name}** (${createdDate})\n   └ ${template.title}`;
+            }).join('\n\n');
+
+            embed.addFields({
+                name: '📋 Available Templates',
+                value: templateList,
+                inline: false
+            });
+
+            await interaction.reply({
+                embeds: [embed],
+                ephemeral: true
+            });
+
+        } catch (error) {
+            console.error('❌ Template library error:', error);
+            await interaction.reply({
+                content: '❌ Failed to load template library.',
+                ephemeral: true
+            });
+        }
+    }
+
+    // Handle send template
+    async handleSendTemplate(interaction) {
+        try {
+            await interaction.reply({
+                content: '📤 Send Template system coming soon! This will let you:\n\n1️⃣ Choose destination (channel/members)\n2️⃣ Select template from library\n3️⃣ Preview and confirm\n4️⃣ Send with safety checks',
+                ephemeral: true
+            });
+
+            // TODO: Implement destination picker
+            // TODO: Implement template selection
+            // TODO: Implement preview and confirmation
+            // TODO: Implement sending system
+
+        } catch (error) {
+            console.error('❌ Send template error:', error);
+            await interaction.reply({
+                content: '❌ Feature not ready yet.',
+                ephemeral: true
             });
         }
     }
