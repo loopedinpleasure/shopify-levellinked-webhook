@@ -204,60 +204,23 @@ function createOptOutButton() {
         );
 }
 
-// Create order notification embed with categorization
+// Create order notification embed with simplified format
 async function createOrderEmbed(orderData, product, category) {
     const embed = new EmbedBuilder()
-        .setTitle(`🛍️ Someone ordered ${product.name}!`)
-        .setDescription(`${category.emoji} **${category.name}**`)
-        .setColor(getCategoryColor(category.name))
-        .setTimestamp();
+        .setTitle(`🛍️ Someone ordered **${product.name}**!`)
+        .setDescription(`https://levellinked.myshopify.com/products/${product.product_id}`)
+        .setColor('#00ff00')
+        .setTimestamp()
+        .setFooter({
+            text: 'Level Linked'
+        });
 
     // Add product image if available
     if (product.image_url) {
         embed.setThumbnail(product.image_url);
     }
 
-    // Add product link
-    if (product.product_id) {
-        const shopUrl = config.shopify.shopUrl;
-        embed.addFields({
-            name: '🔗 View Product',
-            value: `https://${shopUrl}/products/${product.product_id}`,
-            inline: false
-        });
-    }
-
-    // Add product details
-    embed.addFields(
-        {
-            name: '📦 Product',
-            value: product.name,
-            inline: true
-        },
-        {
-            name: '💰 Price',
-            value: `$${parseFloat(product.price).toFixed(2)}`,
-            inline: true
-        }
-    );
-
-    // Add footer
-    embed.setFooter({
-        text: 'Level Linked • New Order'
-    });
-
     return embed;
-}
-
-// Get category color
-function getCategoryColor(categoryName) {
-    const colors = {
-        'Adult Toys': '#ff69b4',
-        'Accessories': '#4169e1',
-        'General': '#00ff00'
-    };
-
-    return colors[categoryName] || '#00ff00';
 }
 
 // Create statistics embed
@@ -332,6 +295,51 @@ function createHealthCheckEmbed(healthData) {
     return embed;
 }
 
+// Create welcome DM embed
+function createWelcomeDMEmbed() {
+    const embed = new EmbedBuilder()
+        .setTitle('🎉 Welcome to **Looped!**')
+        .setDescription('https://levellinked.myshopify.com/')
+        .setColor('#36393f') // Discord gray
+        .setTimestamp()
+        .setFooter({ text: 'Level up with our special offers!' });
+
+    return embed;
+}
+
+// Get random reaction emojis for order notifications
+function getOrderReactions() {
+    // Always present reactions
+    const alwaysReactions = ['👍🏽', '👎🏽'];
+    
+    // Random variety emojis (single)
+    const singleEmojis = [
+        '😏', '😈', '🥵', '🥶', '🤤', '😉', '👀', '😶‍🌫️', 
+        '💦', '😛', '✨', '🙌🏽', '👏🏽', '🫶🏽'
+    ];
+    
+    // Random variety emojis (pairs)
+    const pairEmojis = [
+        ['👉🏽', '👌🏽'],
+        ['✋🏽', '🤚🏽'],
+        ['👏🏽', '🍑']
+    ];
+    
+    // Randomly choose between single emoji or pair
+    const usePair = Math.random() < 0.3; // 30% chance for pair
+    
+    let randomReaction;
+    if (usePair) {
+        const randomPair = pairEmojis[Math.floor(Math.random() * pairEmojis.length)];
+        randomReaction = randomPair;
+    } else {
+        const randomSingle = singleEmojis[Math.floor(Math.random() * singleEmojis.length)];
+        randomReaction = [randomSingle];
+    }
+    
+    return [...alwaysReactions, ...randomReaction];
+}
+
 module.exports = {
     createPrimaryPlatformEmbed,
     createEngagementPlatformEmbed,
@@ -339,5 +347,7 @@ module.exports = {
     createOptOutButton,
     createOrderEmbed,
     createStatisticsEmbed,
-    createHealthCheckEmbed
+    createHealthCheckEmbed,
+    createWelcomeDMEmbed,
+    getOrderReactions
 };
