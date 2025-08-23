@@ -8,15 +8,15 @@ function createPrimaryPlatformEmbed() {
         .setDescription('Core bot management and analytics')
         .setColor('#00ff00')
         .addFields(
-            { 
-                name: '📊 Current Status', 
-                value: 'All systems operational', 
-                inline: false 
+            {
+                name: '📊 Current Status',
+                value: 'All systems operational',
+                inline: false
             },
-            { 
-                name: '🛍️ Features', 
-                value: '• Real Orders\n• Auto-DM System\n• Custom Messages\n• Analytics Export', 
-                inline: false 
+            {
+                name: '🛍️ Features',
+                value: '• Real Orders\n• Auto-DM System\n• Custom Messages\n• Analytics Export',
+                inline: false
             }
         )
         .setTimestamp();
@@ -59,6 +59,11 @@ function createPrimaryPlatformEmbed() {
     const managementButtons = new ActionRowBuilder()
         .addComponents(
             new ButtonBuilder()
+                .setCustomId('init_database')
+                .setLabel('🗄️ Init Database')
+                .setEmoji('🔧')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
                 .setCustomId('create_embed_template')
                 .setLabel('🎨 Create Template')
                 .setStyle(ButtonStyle.Secondary),
@@ -90,15 +95,15 @@ function createEngagementPlatformEmbed() {
         .setDescription('Boost sales through community interaction')
         .setColor('#ffa500')
         .addFields(
-            { 
-                name: '🎯 Sales Features', 
-                value: '• Product Polls\n• Referral Rewards\n• Shop Giveaways', 
-                inline: false 
+            {
+                name: '🎯 Sales Features',
+                value: '• Product Polls\n• Referral Rewards\n• Shop Giveaways',
+                inline: false
             },
-            { 
-                name: '📈 Growth Tools', 
-                value: '• Invite Tracking\n• Engagement Analytics\n• Automated Rewards', 
-                inline: false 
+            {
+                name: '📈 Growth Tools',
+                value: '• Invite Tracking\n• Engagement Analytics\n• Automated Rewards',
+                inline: false
             }
         )
         .setTimestamp();
@@ -242,7 +247,7 @@ function getCategoryColor(categoryName) {
         'Accessories': '#4169e1',
         'General': '#00ff00'
     };
-    
+
     return colors[categoryName] || '#00ff00';
 }
 
