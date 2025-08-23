@@ -8,6 +8,7 @@ module.exports = {
         serverOwnerId: process.env.SERVER_OWNER_ID,
         notificationChannelId: process.env.NOTIFICATION_CHANNEL_ID || '1396453757922971741',
         adminChannelId: process.env.ADMIN_CHANNEL_ID || '1408813204519522444',
+        logChannelId: process.env.LOG_CHANNEL_ID || '1408813204519522444', // Same as admin for now
         closedDmsRoleId: process.env.CLOSED_DMS_ROLE_ID || '1379198285591609385',
         verifiedRoleId: process.env.VERIFIED_ROLE_ID
     },
@@ -39,6 +40,15 @@ module.exports = {
         },
         analytics: {
             enabled: process.env.ENABLE_ANALYTICS !== 'false'
+        },
+        logging: {
+            enabled: process.env.ENABLE_LOGGING !== 'false',
+            statusInterval: parseInt(process.env.LOG_STATUS_INTERVAL) || 30, // minutes
+            logLevel: process.env.LOG_LEVEL || 'detailed', // basic, detailed, errors
+            logOrders: process.env.LOG_ORDERS !== 'false',
+            logMembers: process.env.LOG_MEMBERS !== 'false',
+            logDMs: process.env.LOG_DMS !== 'false',
+            logErrors: process.env.LOG_ERRORS !== 'false'
         }
     },
 
