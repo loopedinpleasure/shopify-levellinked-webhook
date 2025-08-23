@@ -66,26 +66,35 @@ function createPrimaryPlatformEmbed() {
             new ButtonBuilder()
                 .setCustomId('create_embed_template')
                 .setLabel('🎨 Create Template')
+                .setEmoji('🎨')
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('test_auto_dm')
                 .setLabel('📧 Test Auto-DM')
-                .setStyle(ButtonStyle.Secondary),
+                .setEmoji('📧')
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+    const additionalButtons = new ActionRowBuilder()
+        .addComponents(
             new ButtonBuilder()
                 .setCustomId('manage_categories')
                 .setLabel('🏷️ Categories')
+                .setEmoji('🏷️')
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('export_ai_data')
                 .setLabel('🤖 Export for AI')
+                .setEmoji('🤖')
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('health_check')
                 .setLabel('❤️ Health Check')
+                .setEmoji('❤️')
                 .setStyle(ButtonStyle.Secondary)
         );
 
-    return { embeds: [embed], components: [toggleButtons, messageButtons, managementButtons] };
+    return { embeds: [embed], components: [toggleButtons, messageButtons, managementButtons, additionalButtons] };
 }
 
 // Engagement Platform for community features
