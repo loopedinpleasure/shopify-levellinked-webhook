@@ -3,6 +3,7 @@ const express = require('express');
 const config = require('./config');
 const db = require('./database/db');
 const ShopifyWebhooks = require('./shopify/webhooks');
+const BotLogger = require('./utils/logger');
 const { createPrimaryPlatformEmbed, createEngagementPlatformEmbed } = require('./discord/embeds');
 
 class ShopifyDiscordBot {
@@ -25,6 +26,9 @@ class ShopifyDiscordBot {
 
         // Initialize Shopify webhooks handler
         this.shopifyWebhooks = null;
+
+        // Initialize logger
+        this.logger = null;
 
         // Bot state
         this.isReady = false;
@@ -103,6 +107,9 @@ class ShopifyDiscordBot {
                 }
             } catch (error) {
                 console.error('❌ Webhook error:', error);
+                if (this.logger) {
+                    await this.logger.logError(error, 'Webhook processing');
+                }
                 res.status(500).json({ error: error.message });
             }
         });
@@ -122,8 +129,13 @@ class ShopifyDiscordBot {
             await db.init();
             console.log('✅ Database initialized');
 
+            // Initialize logger
+            this.logger = new BotLogger(this.client);
+            await this.logger.init();
+            console.log('✅ Logger initialized');
+
             // Initialize Shopify webhooks
-            this.shopifyWebhooks = new ShopifyWebhooks(this.client);
+            this.shopifyWebhooks = new ShopifyWebhooks(this.client, this.logger);
             console.log('✅ Shopify webhooks initialized');
 
             // Create admin panels
@@ -134,13 +146,31 @@ class ShopifyDiscordBot {
             this.startAutoDMProcessor();
             console.log('✅ Auto-DM processor started');
 
+            // Update member count for logging
+            await this.updateMemberCountForLogging();
+
             // Mark bot as ready
             this.isReady = true;
             console.log('🎉 Bot fully initialized and ready!');
 
         } catch (error) {
             console.error('❌ Bot initialization failed:', error);
+            if (this.logger) {
+                await this.logger.logError(error, 'Bot initialization');
+            }
             process.exit(1);
+        }
+    }
+
+    // Update member count for logging
+    async updateMemberCountForLogging() {
+        try {
+            const guild = this.client.guilds.cache.get(config.discord.guildId);
+            if (guild && this.logger) {
+                await this.logger.updateMemberCount(guild.memberCount);
+            }
+        } catch (error) {
+            console.error('❌ Failed to update member count:', error);
         }
     }
 
@@ -173,6 +203,9 @@ class ShopifyDiscordBot {
 
         } catch (error) {
             console.error('❌ Error creating admin panels:', error);
+            if (this.logger) {
+                await this.logger.logError(error, 'Admin panel creation');
+            }
         }
     }
 
@@ -191,6 +224,14 @@ class ShopifyDiscordBot {
 
             console.log(`👤 New member tracked: ${member.user.tag}`);
 
+            // Log member activity
+            if (this.logger) {
+                await this.logger.logMemberActivity('Joined', member, {
+                    reason: `New member joined the server`,
+                    role: isVerified ? 'Verified' : 'Unverified'
+                });
+            }
+
             // Schedule auto-DM if eligible
             if (!hasClosedDms && config.features.autoDm.enabled) {
                 this.scheduleAutoDM(member.user.id);
@@ -199,8 +240,14 @@ class ShopifyDiscordBot {
             // Record analytics
             await db.recordEvent('member_join', 'organic');
 
+            // Update member count for logging
+            await this.updateMemberCountForLogging();
+
         } catch (error) {
             console.error('❌ Error tracking new member:', error);
+            if (this.logger) {
+                await this.logger.logError(error, 'Member tracking');
+            }
         }
     }
 
@@ -209,8 +256,22 @@ class ShopifyDiscordBot {
         try {
             await db.updateMemberStatus(userId, { still_in_server: false });
             console.log(`👋 Member marked as left: ${userId}`);
+
+            // Log member activity
+            if (this.logger) {
+                await this.logger.logMemberActivity('Left', { user: { id: userId, tag: 'Unknown' } }, {
+                    reason: 'Member left the server'
+                });
+            }
+
+            // Update member count for logging
+            await this.updateMemberCountForLogging();
+
         } catch (error) {
             console.error('❌ Error marking member as left:', error);
+            if (this.logger) {
+                await this.logger.logError(error, 'Member leave tracking');
+            }
         }
     }
 
@@ -227,16 +288,33 @@ class ShopifyDiscordBot {
             if (hadClosedDms !== hasClosedDms) {
                 await db.updateMemberStatus(userId, { has_closed_dms_role: hasClosedDms });
                 console.log(`🔒 Member ${userId} closed DMs role: ${hasClosedDms}`);
+
+                // Log role change
+                if (this.logger) {
+                    await this.logger.logMemberActivity('Role Changed', newMember, {
+                        role: hasClosedDms ? 'Closed DMs' : 'Open DMs'
+                    });
+                }
             }
 
             // Update verification status
             if (wasVerified !== isVerified) {
                 await db.updateMemberStatus(userId, { is_verified: isVerified });
                 console.log(`✅ Member ${userId} verification: ${isVerified}`);
+
+                // Log verification change
+                if (this.logger) {
+                    await this.logger.logMemberActivity('Verification Changed', newMember, {
+                        role: isVerified ? 'Verified' : 'Unverified'
+                    });
+                }
             }
 
         } catch (error) {
             console.error('❌ Error checking role changes:', error);
+            if (this.logger) {
+                await this.logger.logError(error, 'Role change tracking');
+            }
         }
     }
 
@@ -298,10 +376,20 @@ class ShopifyDiscordBot {
             // Record analytics
             await db.recordEvent('auto_dm_sent', 'auto_dm');
 
+            // Log DM activity
+            if (this.logger) {
+                await this.logger.logDM(userId, member.user.tag, 'Sent', {
+                    type: 'Auto-DM (Welcome)'
+                });
+            }
+
             console.log(`✅ Auto-DM sent to ${member.user.tag}`);
 
         } catch (error) {
             console.error(`❌ Failed to process auto-DM for user ${userId}:`, error);
+            if (this.logger) {
+                await this.logger.logError(error, 'Auto-DM processing');
+            }
         }
     }
 
@@ -318,6 +406,9 @@ class ShopifyDiscordBot {
                 }
             } catch (error) {
                 console.error('❌ Auto-DM processor error:', error);
+                if (this.logger) {
+                    await this.logger.logError(error, 'Auto-DM processor');
+                }
             }
         }, 60000); // Check every minute
     }
@@ -352,6 +443,9 @@ class ShopifyDiscordBot {
 
         } catch (error) {
             console.error('❌ Button interaction error:', error);
+            if (this.logger) {
+                await this.logger.logError(error, 'Button interaction');
+            }
             await interaction.reply({ 
                 content: '❌ An error occurred while processing your request.', 
                 ephemeral: true 
@@ -369,6 +463,9 @@ class ShopifyDiscordBot {
             await interaction.reply({ embeds: [embed], ephemeral: true });
         } catch (error) {
             console.error('❌ Health check error:', error);
+            if (this.logger) {
+                await this.logger.logError(error, 'Health check');
+            }
             await interaction.reply({ 
                 content: '❌ Failed to get health status.', 
                 ephemeral: true 
@@ -386,6 +483,9 @@ class ShopifyDiscordBot {
             await interaction.reply({ embeds: [embed], ephemeral: true });
         } catch (error) {
             console.error('❌ Statistics error:', error);
+            if (this.logger) {
+                await this.logger.logError(error, 'Statistics');
+            }
             await interaction.reply({ 
                 content: '❌ Failed to get statistics.', 
                 ephemeral: true 
@@ -467,6 +567,10 @@ class ShopifyDiscordBot {
     // Graceful shutdown
     async shutdown() {
         console.log('🔄 Shutting down gracefully...');
+        
+        if (this.logger) {
+            this.logger.stop();
+        }
         
         if (this.client) {
             this.client.destroy();
