@@ -49,6 +49,11 @@ function createPrimaryPlatformEmbed() {
             new ButtonBuilder()
                 .setCustomId('dm_single_user')
                 .setLabel('👤 DM User')
+                .setStyle(ButtonStyle.Success),
+            new ButtonBuilder()
+                .setCustomId('template_library')
+                .setLabel('📚 Template Library')
+                .setEmoji('📚')
                 .setStyle(ButtonStyle.Success)
         );
 
@@ -65,14 +70,19 @@ function createPrimaryPlatformEmbed() {
                 .setEmoji('🎨')
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
-                .setCustomId('test_auto_dm')
-                .setLabel('📧 Test Auto-DM')
-                .setEmoji('📧')
+                .setCustomId('send_template')
+                .setLabel('📤 Send Template')
+                .setEmoji('📤')
                 .setStyle(ButtonStyle.Secondary)
         );
 
     const additionalButtons = new ActionRowBuilder()
         .addComponents(
+            new ButtonBuilder()
+                .setCustomId('test_auto_dm')
+                .setLabel('📧 Test Auto-DM')
+                .setEmoji('📧')
+                .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
                 .setCustomId('export_ai_data')
                 .setLabel('🤖 Export for AI')
