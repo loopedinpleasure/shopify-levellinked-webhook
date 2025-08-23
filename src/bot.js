@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { Client, GatewayIntentBits, Events, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, AttachmentBuilder } = require('discord.js');
 const express = require('express');
 const config = require('./config');
 const db = require('./database/db');
@@ -503,6 +503,36 @@ class ShopifyDiscordBot {
                 case 'export_ai_data':
                     await this.handleExportAIData(interaction);
                     break;
+                case 'export_member_data':
+                    await this.handleExportMemberData(interaction);
+                    break;
+                case 'export_order_data':
+                    await this.handleExportOrderData(interaction);
+                    break;
+                case 'export_dm_data':
+                    await this.handleExportDMData(interaction);
+                    break;
+                case 'export_all_data':
+                    await this.handleExportAllData(interaction);
+                    break;
+                case 'generate_ai_prompts':
+                    await this.handleGenerateAIPrompts(interaction);
+                    break;
+                case 'copy_member_prompt':
+                    await this.handleCopyPrompt(interaction, 'member');
+                    break;
+                case 'copy_sales_prompt':
+                    await this.handleCopyPrompt(interaction, 'sales');
+                    break;
+                case 'copy_dm_prompt':
+                    await this.handleCopyPrompt(interaction, 'dm');
+                    break;
+                case 'copy_bi_prompt':
+                    await this.handleCopyPrompt(interaction, 'bi');
+                    break;
+                case 'back_to_prompts':
+                    await this.handleGenerateAIPrompts(interaction);
+                    break;
                 case 'template_library':
                     await this.handleTemplateLibrary(interaction);
                     break;
@@ -536,6 +566,18 @@ class ShopifyDiscordBot {
                 case 'change_template_members':
                     await this.handleSendToMembers(interaction);
                     break;
+                case 'send_to_all_members':
+                    await this.handleSendToAllMembers(interaction);
+                    break;
+                case 'send_to_verified':
+                    await this.handleSendToVerified(interaction);
+                    break;
+                case 'send_to_role':
+                    await this.handleSendToRole(interaction);
+                    break;
+                case 'cancel_send':
+                    await this.handleCancelSend(interaction);
+                    break;
                 default:
                     if (customId.startsWith('select_template_')) {
                         await this.handleTemplateSelection(interaction, customId);
@@ -547,6 +589,22 @@ class ShopifyDiscordBot {
                         await this.handleSendMessage(interaction, customId);
                     } else if (customId.startsWith('send_dm_')) {
                         await this.handleSendDM(interaction, customId);
+                    } else if (customId.startsWith('select_channel_')) {
+                        await this.handleChannelSelection(interaction, customId);
+                    } else if (customId.startsWith('send_to_all_members_')) {
+                        await this.handleSendToAllMembers(interaction, customId);
+                    } else if (customId.startsWith('send_to_verified_')) {
+                        await this.handleSendToVerified(interaction, customId);
+                    } else if (customId.startsWith('send_to_role_')) {
+                        await this.handleSendToRole(interaction, customId);
+                    } else if (customId.startsWith('back_to_template_')) {
+                        await this.handleBackToTemplate(interaction, customId);
+                    } else if (customId.startsWith('send_template_to_channel_')) {
+                        await this.handleSendTemplateToChannel(interaction, customId);
+                    } else if (customId.startsWith('send_template_to_all_')) {
+                        await this.handleSendTemplateToAll(interaction, customId);
+                    } else if (customId.startsWith('send_template_to_verified_')) {
+                        await this.handleSendTemplateToVerified(interaction, customId);
                     } else {
                         await interaction.reply({ 
                             content: '⚠️ This feature is not implemented yet.', 
@@ -594,7 +652,40 @@ class ShopifyDiscordBot {
             const { createStatisticsEmbed } = require('./discord/embeds');
             const embed = createStatisticsEmbed(stats);
             
-            await interaction.reply({ embeds: [embed], ephemeral: true });
+            // Create action buttons for additional analytics
+            const actionButtons = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('export_member_data')
+                        .setLabel('📊 Export Member Data')
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId('export_order_data')
+                        .setLabel('🛍️ Export Order Data')
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId('export_dm_data')
+                        .setLabel('📧 Export DM Data')
+                        .setStyle(ButtonStyle.Primary)
+                );
+
+            const exportButtons = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('export_all_data')
+                        .setLabel('📁 Export All Data')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId('generate_ai_prompts')
+                        .setLabel('🤖 Generate AI Prompts')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+            
+            await interaction.reply({ 
+                embeds: [embed], 
+                components: [actionButtons, exportButtons],
+                ephemeral: true 
+            });
         } catch (error) {
             console.error('❌ Statistics error:', error);
             if (this.logger) {
@@ -913,6 +1004,516 @@ class ShopifyDiscordBot {
             await interaction.reply({ 
                 content: '❌ Feature not ready yet.', 
                 ephemeral: true 
+            });
+        }
+    }
+
+    // Handle export member data
+    async handleExportMemberData(interaction) {
+        try {
+            await interaction.reply({ 
+                content: '📊 Exporting member data... This may take a few seconds.', 
+                ephemeral: true 
+            });
+
+            // Get all member data
+            const members = await db.all(`
+                SELECT 
+                    user_id,
+                    username,
+                    joined_at,
+                    is_verified,
+                    has_closed_dms_role,
+                    welcome_dm_sent,
+                    dm_sent_at,
+                    opt_out_at,
+                    still_in_server,
+                    total_invites,
+                    referral_rewards_earned,
+                    created_at
+                FROM member_tracking 
+                ORDER BY joined_at DESC
+            `);
+
+            if (members.length === 0) {
+                await interaction.editReply({ 
+                    content: '❌ No member data found to export.', 
+                    ephemeral: true 
+                });
+                return;
+            }
+
+            // Create CSV content
+            const csvHeaders = [
+                'User ID',
+                'Username',
+                'Joined At',
+                'Is Verified',
+                'Has Closed DMs',
+                'Welcome DM Sent',
+                'DM Sent At',
+                'Opt Out At',
+                'Still In Server',
+                'Total Invites',
+                'Referral Rewards',
+                'Created At'
+            ];
+
+            const csvRows = members.map(member => [
+                member.user_id,
+                member.username,
+                member.joined_at,
+                member.is_verified ? 'Yes' : 'No',
+                member.has_closed_dms_role ? 'Yes' : 'No',
+                member.welcome_dm_sent ? 'Yes' : 'No',
+                member.dm_sent_at || '',
+                member.opt_out_at || '',
+                member.still_in_server ? 'Yes' : 'No',
+                member.total_invites,
+                member.referral_rewards_earned,
+                member.created_at
+            ]);
+
+            const csvContent = [csvHeaders, ...csvRows]
+                .map(row => row.map(field => `"${field}"`).join(','))
+                .join('\n');
+
+            // Create and send file
+            const buffer = Buffer.from(csvContent, 'utf-8');
+            const attachment = new AttachmentBuilder(buffer, { name: `member_data_${new Date().toISOString().split('T')[0]}.csv` });
+
+            await interaction.editReply({ 
+                content: `✅ **Member data exported successfully!**\n\n📊 **Total members:** ${members.length}\n📁 **File:** member_data_${new Date().toISOString().split('T')[0]}.csv\n\nUse this data with ChatGPT, Claude, or any AI tool for analysis!`,
+                files: [attachment],
+                ephemeral: true 
+            });
+
+            // Log the export
+            if (this.logger) {
+                await this.logger.sendStatusUpdate('Data Exported', `Member data exported (${members.length} records)`, '#00ff00');
+            }
+
+        } catch (error) {
+            console.error('❌ Export member data error:', error);
+            await interaction.editReply({ 
+                content: `❌ Failed to export member data: ${error.message}`, 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Handle export order data
+    async handleExportOrderData(interaction) {
+        try {
+            await interaction.reply({ 
+                content: '🛍️ Exporting order data... This may take a few seconds.', 
+                ephemeral: true 
+            });
+
+            // Get all order data
+            const orders = await db.all(`
+                SELECT 
+                    order_number,
+                    customer_email,
+                    total_price,
+                    currency,
+                    status,
+                    created_at,
+                    updated_at
+                FROM orders 
+                ORDER BY created_at DESC
+            `);
+
+            if (orders.length === 0) {
+                await interaction.editReply({ 
+                    content: '❌ No order data found to export.', 
+                    ephemeral: true 
+                });
+                return;
+            }
+
+            // Create CSV content
+            const csvHeaders = [
+                'Order Number',
+                'Customer Email',
+                'Total Price',
+                'Currency',
+                'Status',
+                'Created At',
+                'Updated At'
+            ];
+
+            const csvRows = orders.map(order => [
+                order.order_number,
+                order.customer_email || '',
+                order.total_price,
+                order.currency,
+                order.status,
+                order.created_at,
+                order.updated_at
+            ]);
+
+            const csvContent = [csvHeaders, ...csvRows]
+                .map(row => row.map(field => `"${field}"`).join(','))
+                .join('\n');
+
+            // Create and send file
+            const buffer = Buffer.from(csvContent, 'utf-8');
+            const attachment = new AttachmentBuilder(buffer, { name: `order_data_${new Date().toISOString().split('T')[0]}.csv` });
+
+            await interaction.editReply({ 
+                content: `✅ **Order data exported successfully!**\n\n🛍️ **Total orders:** ${orders.length}\n📁 **File:** order_data_${new Date().toISOString().split('T')[0]}.csv\n\nUse this data with AI tools for sales analysis and insights!`,
+                files: [attachment],
+                ephemeral: true 
+            });
+
+            // Log the export
+            if (this.logger) {
+                await this.logger.sendStatusUpdate('Data Exported', `Order data exported (${orders.length} records)`, '#00ff00');
+            }
+
+        } catch (error) {
+            console.error('❌ Export order data error:', error);
+            await interaction.editReply({ 
+                content: `❌ Failed to export order data: ${error.message}`, 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Handle export DM data
+    async handleExportDMData(interaction) {
+        try {
+            await interaction.reply({ 
+                content: '📧 Exporting DM data... This may take a few seconds.', 
+                ephemeral: true 
+            });
+
+            // Get all DM analytics data
+            const dmData = await db.all(`
+                SELECT 
+                    metric_type,
+                    source_type,
+                    count,
+                    metadata,
+                    created_at
+                FROM analytics 
+                WHERE metric_type LIKE '%dm%'
+                ORDER BY created_at DESC
+            `);
+
+            if (dmData.length === 0) {
+                await interaction.editReply({ 
+                    content: '❌ No DM data found to export.', 
+                    ephemeral: true 
+                });
+                return;
+            }
+
+            // Create CSV content
+            const csvHeaders = [
+                'Metric Type',
+                'Source Type',
+                'Count',
+                'Metadata',
+                'Created At'
+            ];
+
+            const csvRows = dmData.map(record => [
+                record.metric_type,
+                record.source_type || '',
+                record.count,
+                record.metadata || '',
+                record.created_at
+            ]);
+
+            const csvContent = [csvHeaders, ...csvRows]
+                .map(row => row.map(field => `"${field}"`).join(','))
+                .join('\n');
+
+            // Create and send file
+            const buffer = Buffer.from(csvContent, 'utf-8');
+            const attachment = new AttachmentBuilder(buffer, { name: `dm_data_${new Date().toISOString().split('T')[0]}.csv` });
+
+            await interaction.editReply({ 
+                content: `✅ **DM data exported successfully!**\n\n📧 **Total DM records:** ${dmData.length}\n📁 **File:** dm_data_${new Date().toISOString().split('T')[0]}.csv\n\nUse this data to analyze DM effectiveness and engagement!`,
+                files: [attachment],
+                ephemeral: true 
+            });
+
+            // Log the export
+            if (this.logger) {
+                await this.logger.sendStatusUpdate('Data Exported', `DM data exported (${dmData.length} records)`, '#00ff00');
+            }
+
+        } catch (error) {
+            console.error('❌ Export DM data error:', error);
+            await interaction.editReply({ 
+                content: `❌ Failed to export DM data: ${error.message}`, 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Handle export all data
+    async handleExportAllData(interaction) {
+        try {
+            await interaction.reply({ 
+                content: '📁 Exporting all data... This may take a few minutes.', 
+                ephemeral: true 
+            });
+
+            // Get all data types
+            const [members, orders, dmData, templates, analytics] = await Promise.all([
+                db.all('SELECT * FROM member_tracking ORDER BY joined_at DESC'),
+                db.all('SELECT * FROM orders ORDER BY created_at DESC'),
+                db.all('SELECT * FROM analytics ORDER BY created_at DESC'),
+                db.all('SELECT * FROM embed_templates ORDER BY created_at DESC'),
+                db.all('SELECT * FROM categories ORDER BY created_at DESC')
+            ]);
+
+            // Create comprehensive CSV
+            const csvHeaders = [
+                'Data Type',
+                'Record ID',
+                'Data JSON',
+                'Created At'
+            ];
+
+            const allRecords = [
+                ...members.map(m => ['member', m.id, JSON.stringify(m), m.created_at]),
+                ...orders.map(o => ['order', o.id, JSON.stringify(o), o.created_at]),
+                ...dmData.map(d => ['dm_analytics', d.id, JSON.stringify(d), d.created_at]),
+                ...templates.map(t => ['template', t.id, JSON.stringify(t), t.created_at]),
+                ...analytics.map(a => ['category', a.id, JSON.stringify(a), a.created_at])
+            ];
+
+            const csvContent = [csvHeaders, ...allRecords]
+                .map(row => row.map(field => `"${field}"`).join(','))
+                .join('\n');
+
+            // Create and send file
+            const buffer = Buffer.from(csvContent, 'utf-8');
+            const attachment = new AttachmentBuilder(buffer, { name: `all_data_${new Date().toISOString().split('T')[0]}.csv` });
+
+            const totalRecords = allRecords.length;
+            await interaction.editReply({ 
+                content: `✅ **All data exported successfully!**\n\n📁 **Total records:** ${totalRecords}\n📊 **Breakdown:**\n   • Members: ${members.length}\n   • Orders: ${orders.length}\n   • DM Analytics: ${dmData.length}\n   • Templates: ${templates.length}\n   • Categories: ${analytics.length}\n\n📁 **File:** all_data_${new Date().toISOString().split('T')[0]}.csv\n\nThis comprehensive export is perfect for AI analysis and business intelligence!`,
+                files: [attachment],
+                ephemeral: true 
+            });
+
+            // Log the export
+            if (this.logger) {
+                await this.logger.sendStatusUpdate('Data Exported', `All data exported (${totalRecords} records)`, '#00ff00');
+            }
+
+        } catch (error) {
+            console.error('❌ Export all data error:', error);
+            await interaction.editReply({ 
+                content: `❌ Failed to export all data: ${error.message}`, 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Handle generate AI prompts
+    async handleGenerateAIPrompts(interaction) {
+        try {
+            await interaction.reply({ 
+                content: '🤖 Generating AI analysis prompts... This may take a few seconds.', 
+                ephemeral: true 
+            });
+
+            // Get basic stats for context
+            const stats = await this.getStatistics();
+            
+            // Generate AI prompts for different analysis types
+            const prompts = this.generateAIPrompts(stats);
+
+            // Create embed with prompts
+            const embed = new EmbedBuilder()
+                .setTitle('🤖 AI Analysis Prompts')
+                .setDescription('Use these prompts with ChatGPT, Claude, or any AI tool to analyze your exported data!')
+                .setColor('#36393f')
+                .setTimestamp();
+
+            // Add prompt fields
+            embed.addFields(
+                {
+                    name: '📊 **Member Growth Analysis**',
+                    value: prompts.memberGrowth,
+                    inline: false
+                },
+                {
+                    name: '🛍️ **Sales Performance Analysis**',
+                    value: prompts.salesAnalysis,
+                    inline: false
+                },
+                {
+                    name: '📧 **DM Effectiveness Analysis**',
+                    value: prompts.dmAnalysis,
+                    inline: false
+                },
+                {
+                    name: '🎯 **Business Intelligence**',
+                    value: prompts.businessIntelligence,
+                    inline: false
+                }
+            );
+
+            // Create action buttons
+            const actionButtons = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('copy_member_prompt')
+                        .setLabel('📋 Copy Member Prompt')
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId('copy_sales_prompt')
+                        .setLabel('📋 Copy Sales Prompt')
+                        .setStyle(ButtonStyle.Primary)
+                );
+
+            const copyButtons = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('copy_dm_prompt')
+                        .setLabel('📋 Copy DM Prompt')
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId('copy_bi_prompt')
+                        .setLabel('📋 Copy BI Prompt')
+                        .setStyle(ButtonStyle.Primary)
+                );
+
+            await interaction.editReply({ 
+                content: '🤖 **AI Analysis Prompts Generated!**\n\nUse these prompts with your exported CSV data for powerful insights.',
+                embeds: [embed],
+                components: [actionButtons, copyButtons],
+                ephemeral: true 
+            });
+
+        } catch (error) {
+            console.error('❌ Generate AI prompts error:', error);
+            await interaction.editReply({ 
+                content: `❌ Failed to generate AI prompts: ${error.message}`, 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Generate AI prompts based on statistics
+    generateAIPrompts(stats) {
+        const memberGrowth = `Analyze this Discord server member data and provide insights on:
+1. Member growth trends and patterns
+2. Verification rate analysis
+3. Member retention and churn rates
+4. Seasonal growth patterns
+5. Recommendations for member acquisition
+
+Context: Server has ${stats.total_members} total members, ${stats.verified_members} verified, ${stats.new_members_today} new today, ${stats.new_members_week} new this week.`;
+
+        const salesAnalysis = `Analyze this Shopify order data and provide insights on:
+1. Sales trends and patterns
+2. Customer behavior analysis
+3. Revenue growth analysis
+4. Seasonal sales patterns
+5. Customer lifetime value insights
+
+Context: ${stats.total_orders} total orders, ${stats.orders_today} today, ${stats.orders_week} this week, ${stats.orders_month} this month.`;
+
+        const dmAnalysis = `Analyze this Discord DM engagement data and provide insights on:
+1. DM effectiveness and engagement rates
+2. Best timing for DMs
+3. Template performance analysis
+4. Opt-out rate analysis
+5. Recommendations for DM strategy
+
+Context: ${stats.total_dms} total DMs sent, ${stats.dms_today} today, ${stats.dms_week} this week.`;
+
+        const businessIntelligence = `Provide comprehensive business intelligence analysis of this Discord + Shopify data:
+1. Cross-platform customer journey analysis
+2. Marketing effectiveness (Discord → Shopify conversion)
+3. Customer engagement patterns
+4. Revenue attribution to Discord activities
+5. Strategic recommendations for growth
+
+Focus on actionable insights that can improve business performance.`;
+
+        return {
+            memberGrowth,
+            salesAnalysis,
+            dmAnalysis,
+            businessIntelligence
+        };
+    }
+
+    // Handle copy prompt
+    async handleCopyPrompt(interaction, promptType) {
+        try {
+            // Get stats for context
+            const stats = await this.getStatistics();
+            const prompts = this.generateAIPrompts(stats);
+            
+            let promptText = '';
+            let promptName = '';
+            
+            switch (promptType) {
+                case 'member':
+                    promptText = prompts.memberGrowth;
+                    promptName = 'Member Growth Analysis';
+                    break;
+                case 'sales':
+                    promptText = prompts.salesAnalysis;
+                    promptName = 'Sales Performance Analysis';
+                    break;
+                case 'dm':
+                    promptText = prompts.dmAnalysis;
+                    promptName = 'DM Effectiveness Analysis';
+                    break;
+                case 'bi':
+                    promptText = prompts.businessIntelligence;
+                    promptName = 'Business Intelligence';
+                    break;
+                default:
+                    promptText = 'Invalid prompt type';
+                    promptName = 'Unknown';
+            }
+
+            // Create embed with the prompt
+            const embed = new EmbedBuilder()
+                .setTitle(`📋 ${promptName} Prompt`)
+                .setDescription('**Copy this prompt and use it with your exported CSV data:**')
+                .addFields({
+                    name: '🤖 **AI Prompt**',
+                    value: `\`\`\`${promptText}\`\`\``,
+                    inline: false
+                })
+                .setColor('#36393f')
+                .setTimestamp()
+                .setFooter({ text: 'Paste this prompt into ChatGPT, Claude, or any AI tool' });
+
+            // Create action buttons
+            const actionButtons = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId('back_to_prompts')
+                        .setLabel('⬅️ Back to All Prompts')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+
+            await interaction.update({
+                content: `📋 **${promptName} Prompt Ready!**\n\nCopy the prompt below and use it with your exported data for powerful AI analysis.`,
+                embeds: [embed],
+                components: [actionButtons]
+            });
+
+        } catch (error) {
+            console.error('❌ Copy prompt error:', error);
+            await interaction.reply({
+                content: `❌ Failed to copy prompt: ${error.message}`,
+                ephemeral: true
             });
         }
     }
@@ -1696,19 +2297,11 @@ class ShopifyDiscordBot {
             }
 
             if (destination === 'channel') {
-                // For channel sending, we'll need to implement channel selection
-                await interaction.update({
-                    content: '📺 **Channel Selection Coming Soon!**\n\nThis will let you choose which channel to send the template to.',
-                    embeds: [],
-                    components: []
-                });
+                // Show channel selection
+                await this.showChannelSelection(interaction, selectedTemplate);
             } else if (destination === 'members') {
-                // For member sending, we'll need to implement member selection
-                await interaction.update({
-                    content: '👥 **Member Selection Coming Soon!**\n\nThis will let you choose which members to send the template to.',
-                    embeds: [],
-                    components: []
-                });
+                // Show member selection
+                await this.showMemberSelection(interaction, selectedTemplate);
             }
 
             // Log the template usage
@@ -1720,6 +2313,719 @@ class ShopifyDiscordBot {
             console.error('❌ Confirm send error:', error);
             await interaction.reply({
                 content: '❌ Failed to confirm send.',
+                ephemeral: true
+            });
+        }
+    }
+
+    // Show channel selection for template sending
+    async showChannelSelection(interaction, selectedTemplate) {
+        try {
+            // Get all text channels in the server
+            const guild = this.client.guilds.cache.get(config.discord.guildId);
+            const textChannels = guild.channels.cache.filter(channel => 
+                channel.type === 0 && // Text channel
+                channel.permissionsFor(this.client.user.id).has('SendMessages')
+            );
+
+            if (textChannels.size === 0) {
+                await interaction.update({
+                    content: '❌ **No accessible text channels found.**\n\nMake sure the bot has permission to send messages in channels.',
+                    embeds: [],
+                    components: []
+                });
+                return;
+            }
+
+            // Create channel selection embed
+            const embed = new EmbedBuilder()
+                .setTitle('📺 Channel Selection - Step 3')
+                .setDescription(`**Template:** ${selectedTemplate.name}\n**Destination:** 📺 Channel\n\nChoose which channel to send the template to:`)
+                .setColor('#36393f')
+                .setTimestamp();
+
+            // Create channel selection buttons (max 5 per row)
+            const channelButtons = [];
+            const channels = Array.from(textChannels.values());
+            
+            for (let i = 0; i < channels.length; i += 5) {
+                const row = new ActionRowBuilder();
+                const rowChannels = channels.slice(i, i + 5);
+                
+                rowChannels.forEach((channel, index) => {
+                    row.addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`select_channel_${channel.id}_${selectedTemplate.id}`)
+                            .setLabel(`#${channel.name}`)
+                            .setStyle(ButtonStyle.Primary)
+                    );
+                });
+                
+                channelButtons.push(row);
+            }
+
+            // Add back button
+            const backButton = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`back_to_template_${selectedTemplate.id}_channel`)
+                        .setLabel('⬅️ Back to Template')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+
+            // Store template for next step
+            interaction.selectedTemplate = selectedTemplate;
+            interaction.destination = 'channel';
+
+            await interaction.update({
+                content: `📺 **Select Channel for "${selectedTemplate.name}"**`,
+                embeds: [embed],
+                components: [...channelButtons, backButton]
+            });
+
+        } catch (error) {
+            console.error('❌ Channel selection error:', error);
+            await interaction.update({
+                content: `❌ Failed to show channel selection: ${error.message}`,
+                embeds: [],
+                components: []
+            });
+        }
+    }
+
+    // Show member selection for template sending
+    async showMemberSelection(interaction, selectedTemplate) {
+        try {
+            // Get all members in the server (excluding bots)
+            const guild = this.client.guilds.cache.get(config.discord.guildId);
+            const members = guild.members.cache.filter(member => 
+                !member.user.bot && 
+                !member.roles.cache.has(config.discord.closedDmsRoleId) // Skip users with closed DMs
+            );
+
+            if (members.size === 0) {
+                await interaction.update({
+                    content: '❌ **No eligible members found.**\n\nAll members either have closed DMs or are bots.',
+                    embeds: [],
+                    components: []
+                });
+                return;
+            }
+
+            // Create member selection embed
+            const embed = new EmbedBuilder()
+                .setTitle('👥 Member Selection - Step 3')
+                .setDescription(`**Template:** ${selectedTemplate.name}\n**Destination:** 👥 Members\n\nChoose how to select members:`)
+                .addFields(
+                    { name: '📊 Total Eligible Members', value: `${members.size} members`, inline: true },
+                    { name: '⚠️ Note', value: 'Users with closed DMs are automatically excluded', inline: true }
+                )
+                .setColor('#36393f')
+                .setTimestamp();
+
+            // Create member selection options
+            const memberOptions = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`send_to_all_members_${selectedTemplate.id}`)
+                        .setLabel('📢 Send to All Members')
+                        .setStyle(ButtonStyle.Primary),
+                    new ButtonBuilder()
+                        .setCustomId(`send_to_verified_${selectedTemplate.id}`)
+                        .setLabel('✅ Send to Verified Only')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId(`send_to_role_${selectedTemplate.id}`)
+                        .setLabel('🎭 Send to Role')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+
+            // Add back button
+            const backButton = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`back_to_template_${selectedTemplate.id}_members`)
+                        .setLabel('⬅️ Back to Template')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+
+            // Store template for next step
+            interaction.selectedTemplate = selectedTemplate;
+            interaction.destination = 'members';
+
+            await interaction.update({
+                content: `👥 **Select Members for "${selectedTemplate.name}"**`,
+                embeds: [embed],
+                components: [memberOptions, backButton]
+            });
+
+        } catch (error) {
+            console.error('❌ Member selection error:', error);
+            await interaction.update({
+                content: `❌ Failed to show member selection: ${error.message}`,
+                embeds: [],
+                components: []
+            });
+        }
+    }
+
+    // Handle channel selection
+    async handleChannelSelection(interaction, customId) {
+        try {
+            // Extract channel ID and template ID
+            const parts = customId.replace('select_channel_', '').split('_');
+            const channelId = parts[0];
+            const templateId = parseInt(parts[1]);
+            
+            // Get the selected template
+            const selectedTemplate = interaction.selectedTemplate;
+            if (!selectedTemplate) {
+                await interaction.reply({
+                    content: '❌ No template selected. Please start over.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Get the channel
+            const channel = this.client.channels.cache.get(channelId);
+            if (!channel) {
+                await interaction.reply({
+                    content: '❌ Channel not found. Please try again.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Create final confirmation embed
+            const confirmEmbed = new EmbedBuilder()
+                .setTitle('📺 Final Confirmation - Channel')
+                .setDescription(`**Template:** ${selectedTemplate.name}\n**Channel:** #${channel.name}\n\n**Preview:**`)
+                .setColor('#36393f')
+                .setTimestamp();
+
+            // Create the actual template embed
+            const templateEmbed = new EmbedBuilder()
+                .setTitle(selectedTemplate.title)
+                .setDescription(selectedTemplate.description)
+                .setColor('#36393f')
+                .setTimestamp();
+
+            if (selectedTemplate.image_url) {
+                templateEmbed.setImage({ url: selectedTemplate.image_url });
+            }
+
+            if (selectedTemplate.footer_text) {
+                templateEmbed.setFooter({ text: selectedTemplate.footer_text });
+            }
+
+            // Create action buttons
+            const actionButtons = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`send_template_to_channel_${channelId}_${templateId}`)
+                        .setLabel('✅ Send to Channel')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId(`cancel_send_${templateId}`)
+                        .setLabel('❌ Cancel')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+            // Store final data
+            interaction.finalChannel = channel;
+            interaction.finalTemplate = selectedTemplate;
+
+            await interaction.update({
+                content: `📺 **Ready to send "${selectedTemplate.name}" to #${channel.name}**`,
+                embeds: [confirmEmbed, templateEmbed],
+                components: [actionButtons]
+            });
+
+        } catch (error) {
+            console.error('❌ Channel selection error:', error);
+            await interaction.reply({
+                content: `❌ Failed to process channel selection: ${error.message}`,
+                ephemeral: true
+            });
+        }
+    }
+
+    // Handle send to all members
+    async handleSendToAllMembers(interaction, customId) {
+        try {
+            // Extract template ID
+            const templateId = parseInt(customId.replace('send_to_all_members_', ''));
+            
+            // Get the selected template
+            const selectedTemplate = interaction.selectedTemplate;
+            if (!selectedTemplate) {
+                await interaction.reply({
+                    content: '❌ No template selected. Please start over.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Get all eligible members
+            const guild = this.client.guilds.cache.get(config.discord.guildId);
+            const eligibleMembers = guild.members.cache.filter(member => 
+                !member.user.bot && 
+                !member.roles.cache.has(config.discord.closedDmsRoleId)
+            );
+
+            // Create final confirmation embed
+            const confirmEmbed = new EmbedBuilder()
+                .setTitle('👥 Final Confirmation - All Members')
+                .setDescription(`**Template:** ${selectedTemplate.name}\n**Target:** All eligible members (${eligibleMembers.size})\n\n**Preview:**`)
+                .setColor('#36393f')
+                .setTimestamp();
+
+            // Create the actual template embed
+            const templateEmbed = new EmbedBuilder()
+                .setTitle(selectedTemplate.title)
+                .setDescription(selectedTemplate.description)
+                .setColor('#36393f')
+                .setTimestamp();
+
+            if (selectedTemplate.image_url) {
+                templateEmbed.setImage({ url: selectedTemplate.image_url });
+            }
+
+            if (selectedTemplate.footer_text) {
+                templateEmbed.setFooter({ text: selectedTemplate.footer_text });
+            }
+
+            // Create action buttons
+            const actionButtons = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`send_template_to_all_${templateId}`)
+                        .setLabel('✅ Send to All Members')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId(`cancel_send_${templateId}`)
+                        .setLabel('❌ Cancel')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+            // Store final data
+            interaction.finalMembers = Array.from(eligibleMembers.values());
+            interaction.finalTemplate = selectedTemplate;
+
+            await interaction.update({
+                content: `👥 **Ready to send "${selectedTemplate.name}" to ${eligibleMembers.size} members**`,
+                embeds: [confirmEmbed, templateEmbed],
+                components: [actionButtons]
+            });
+
+        } catch (error) {
+            console.error('❌ Send to all members error:', error);
+            await interaction.reply({
+                content: `❌ Failed to process member selection: ${error.message}`,
+                ephemeral: true
+            });
+        }
+    }
+
+    // Handle send to verified members only
+    async handleSendToVerified(interaction, customId) {
+        try {
+            // Extract template ID
+            const templateId = parseInt(customId.replace('send_to_verified_', ''));
+            
+            // Get the selected template
+            const selectedTemplate = interaction.selectedTemplate;
+            if (!selectedTemplate) {
+                await interaction.reply({
+                    content: '❌ No template selected. Please start over.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Get verified members only
+            const guild = this.client.guilds.cache.get(config.discord.guildId);
+            const verifiedMembers = guild.members.cache.filter(member => 
+                !member.user.bot && 
+                !member.roles.cache.has(config.discord.closedDmsRoleId) &&
+                member.roles.cache.has(config.discord.verifiedRoleId)
+            );
+
+            // Create final confirmation embed
+            const confirmEmbed = new EmbedBuilder()
+                .setTitle('✅ Final Confirmation - Verified Members')
+                .setDescription(`**Template:** ${selectedTemplate.name}\n**Target:** Verified members only (${verifiedMembers.size})\n\n**Preview:**`)
+                .setColor('#36393f')
+                .setTimestamp();
+
+            // Create the actual template embed
+            const templateEmbed = new EmbedBuilder()
+                .setTitle(selectedTemplate.title)
+                .setDescription(selectedTemplate.description)
+                .setColor('#36393f')
+                .setTimestamp();
+
+            if (selectedTemplate.image_url) {
+                templateEmbed.setImage({ url: selectedTemplate.image_url });
+            }
+
+            if (selectedTemplate.footer_text) {
+                templateEmbed.setFooter({ text: selectedTemplate.footer_text });
+            }
+
+            // Create action buttons
+            const actionButtons = new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`send_template_to_verified_${templateId}`)
+                        .setLabel('✅ Send to Verified')
+                        .setStyle(ButtonStyle.Success),
+                    new ButtonBuilder()
+                        .setCustomId(`cancel_send_${templateId}`)
+                        .setLabel('❌ Cancel')
+                        .setStyle(ButtonStyle.Danger)
+                );
+
+            // Store final data
+            interaction.finalMembers = Array.from(verifiedMembers.values());
+            interaction.finalTemplate = selectedTemplate;
+
+            await interaction.update({
+                content: `✅ **Ready to send "${selectedTemplate.name}" to ${verifiedMembers.size} verified members**`,
+                embeds: [confirmEmbed, templateEmbed],
+                components: [actionButtons]
+            });
+
+        } catch (error) {
+            console.error('❌ Send to verified error:', error);
+            await interaction.reply({
+                content: `❌ Failed to process verified selection: ${error.message}`,
+                ephemeral: true
+            });
+        }
+    }
+
+    // Handle send to role (placeholder for now)
+    async handleSendToRole(interaction, customId) {
+        try {
+            await interaction.update({
+                content: '🎭 **Role-based sending coming soon!**\n\nThis will let you select specific roles to send templates to.',
+                embeds: [],
+                components: []
+            });
+        } catch (error) {
+            console.error('❌ Send to role error:', error);
+            await interaction.reply({
+                content: '❌ Failed to process role selection.',
+                ephemeral: true
+            });
+        }
+    }
+
+    // Handle back to template
+    async handleBackToTemplate(interaction, customId) {
+        try {
+            // Extract template ID and destination
+            const parts = customId.replace('back_to_template_', '').split('_');
+            const templateId = parseInt(parts[0]);
+            const destination = parts[1];
+            
+            // Get the selected template
+            const selectedTemplate = interaction.selectedTemplate;
+            if (!selectedTemplate) {
+                await interaction.reply({
+                    content: '❌ No template selected. Please start over.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Go back to template selection
+            if (destination === 'channel') {
+                await this.handleSendToChannel(interaction);
+            } else if (destination === 'members') {
+                await this.handleSendToMembers(interaction);
+            } else {
+                await this.handleSendTemplate(interaction);
+            }
+
+        } catch (error) {
+            console.error('❌ Back to template error:', error);
+            await interaction.reply({
+                content: '❌ Failed to go back.',
+                ephemeral: true
+            });
+        }
+    }
+
+    // Handle send template to channel
+    async handleSendTemplateToChannel(interaction, customId) {
+        try {
+            // Extract channel ID and template ID
+            const parts = customId.replace('send_template_to_channel_', '').split('_');
+            const channelId = parts[0];
+            const templateId = parseInt(parts[1]);
+            
+            // Get the final data
+            const channel = interaction.finalChannel;
+            const template = interaction.finalTemplate;
+            
+            if (!channel || !template) {
+                await interaction.reply({
+                    content: '❌ Missing template or channel data. Please start over.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Create the template embed
+            const templateEmbed = new EmbedBuilder()
+                .setTitle(template.title)
+                .setDescription(template.description)
+                .setColor('#36393f')
+                .setTimestamp();
+
+            if (template.image_url) {
+                templateEmbed.setImage({ url: template.image_url });
+            }
+
+            if (template.footer_text) {
+                templateEmbed.setFooter({ text: template.footer_text });
+            }
+
+            // Send to the channel
+            await channel.send({ embeds: [templateEmbed] });
+
+            // Update usage count
+            await db.run('UPDATE embed_templates SET usage_count = usage_count + 1 WHERE id = ?', [templateId]);
+
+            // Update the interaction
+            await interaction.update({
+                content: `✅ **Template "${template.name}" sent successfully to #${channel.name}!**`,
+                embeds: [],
+                components: []
+            });
+
+            // Log the action
+            if (this.logger) {
+                await this.logger.sendStatusUpdate('Template Sent', `Template "${template.name}" sent to #${channel.name}`, '#00ff00');
+            }
+
+            // Record analytics
+            await db.recordEvent('template_sent', 'channel');
+
+            console.log(`✅ Template "${template.name}" sent to #${channel.name}`);
+
+        } catch (error) {
+            console.error('❌ Send template to channel error:', error);
+            await interaction.reply({
+                content: `❌ Failed to send template: ${error.message}`,
+                ephemeral: true
+            });
+        }
+    }
+
+    // Handle send template to all members
+    async handleSendTemplateToAll(interaction, customId) {
+        try {
+            // Extract template ID
+            const templateId = parseInt(customId.replace('send_template_to_all_', ''));
+            
+            // Get the final data
+            const members = interaction.finalMembers;
+            const template = interaction.finalTemplate;
+            
+            if (!members || !template) {
+                await interaction.reply({
+                    content: '❌ Missing template or member data. Please start over.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Update the interaction to show progress
+            await interaction.update({
+                content: `📤 **Sending template "${template.name}" to ${members.length} members...**\n\nThis may take a few minutes.`,
+                embeds: [],
+                components: []
+            });
+
+            // Send to all members (with rate limiting)
+            let successCount = 0;
+            let failCount = 0;
+            
+            for (let i = 0; i < members.length; i++) {
+                try {
+                    const member = members[i];
+                    
+                    // Create the template embed
+                    const templateEmbed = new EmbedBuilder()
+                        .setTitle(template.title)
+                        .setDescription(template.description)
+                        .setColor('#36393f')
+                        .setTimestamp();
+
+                    if (template.image_url) {
+                        templateEmbed.setImage({ url: template.image_url });
+                    }
+
+                    if (template.footer_text) {
+                        templateEmbed.setFooter({ text: template.footer_text });
+                    }
+
+                    // Send DM
+                    await member.send({ embeds: [templateEmbed] });
+                    successCount++;
+                    
+                    // Small delay to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                } catch (error) {
+                    failCount++;
+                    console.error(`Failed to send to ${member.user.tag}:`, error);
+                }
+            }
+
+            // Update usage count
+            await db.run('UPDATE embed_templates SET usage_count = usage_count + 1 WHERE id = ?', [templateId]);
+
+            // Final update
+            await interaction.editReply({
+                content: `✅ **Template "${template.name}" sent to members!**\n\n**Results:**\n✅ Success: ${successCount}\n❌ Failed: ${failCount}`,
+                embeds: [],
+                components: []
+            });
+
+            // Log the action
+            if (this.logger) {
+                await this.logger.sendStatusUpdate('Template Sent', `Template "${template.name}" sent to ${successCount} members`, '#00ff00');
+            }
+
+            // Record analytics
+            await db.recordEvent('template_sent', 'all_members');
+
+            console.log(`✅ Template "${template.name}" sent to ${successCount} members`);
+
+        } catch (error) {
+            console.error('❌ Send template to all members error:', error);
+            await interaction.editReply({
+                content: `❌ Failed to send template: ${error.message}`,
+                embeds: [],
+                components: []
+            });
+        }
+    }
+
+    // Handle send template to verified members
+    async handleSendTemplateToVerified(interaction, customId) {
+        try {
+            // Extract template ID
+            const templateId = parseInt(customId.replace('send_template_to_verified_', ''));
+            
+            // Get the final data
+            const members = interaction.finalMembers;
+            const template = interaction.finalTemplate;
+            
+            if (!members || !template) {
+                await interaction.reply({
+                    content: '❌ Missing template or member data. Please start over.',
+                    ephemeral: true
+                });
+                return;
+            }
+
+            // Update the interaction to show progress
+            await interaction.update({
+                content: `📤 **Sending template "${template.name}" to ${members.length} verified members...**\n\nThis may take a few minutes.`,
+                embeds: [],
+                components: []
+            });
+
+            // Send to verified members (with rate limiting)
+            let successCount = 0;
+            let failCount = 0;
+            
+            for (let i = 0; i < members.length; i++) {
+                try {
+                    const member = members[i];
+                    
+                    // Create the template embed
+                    const templateEmbed = new EmbedBuilder()
+                        .setTitle(template.title)
+                        .setDescription(template.description)
+                        .setColor('#36393f')
+                        .setTimestamp();
+
+                    if (template.image_url) {
+                        templateEmbed.setImage({ url: template.image_url });
+                    }
+
+                    if (template.footer_text) {
+                        templateEmbed.setFooter({ text: template.footer_text });
+                    }
+
+                    // Send DM
+                    await member.send({ embeds: [templateEmbed] });
+                    successCount++;
+                    
+                    // Small delay to avoid rate limiting
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                    
+                } catch (error) {
+                    failCount++;
+                    console.error(`Failed to send to ${member.user.tag}:`, error);
+                }
+            }
+
+            // Update usage count
+            await db.run('UPDATE embed_templates SET usage_count = usage_count + 1 WHERE id = ?', [templateId]);
+
+            // Final update
+            await interaction.editReply({
+                content: `✅ **Template "${template.name}" sent to verified members!**\n\n**Results:**\n✅ Success: ${successCount}\n❌ Failed: ${failCount}`,
+                embeds: [],
+                components: []
+            });
+
+            // Log the action
+            if (this.logger) {
+                await this.logger.sendStatusUpdate('Template Sent', `Template "${template.name}" sent to ${successCount} verified members`, '#00ff00');
+            }
+
+            // Record analytics
+            await db.recordEvent('template_sent', 'verified_members');
+
+            console.log(`✅ Template "${template.name}" sent to ${successCount} verified members`);
+
+        } catch (error) {
+            console.error('❌ Send template to verified members error:', error);
+            await interaction.editReply({
+                content: `❌ Failed to send template: ${error.message}`,
+                embeds: [],
+                components: []
+            });
+        }
+    }
+
+    // Handle cancel send
+    async handleCancelSend(interaction) {
+        try {
+            await interaction.update({
+                content: '❌ **Template sending cancelled. Nothing was sent.**',
+                embeds: [],
+                components: []
+            });
+
+            // Clear final data
+            interaction.finalChannel = null;
+            interaction.finalMembers = null;
+            interaction.finalTemplate = null;
+
+        } catch (error) {
+            console.error('❌ Cancel send error:', error);
+            await interaction.reply({
+                content: '❌ Failed to cancel.',
                 ephemeral: true
             });
         }
@@ -1791,31 +3097,85 @@ class ShopifyDiscordBot {
         }
     }
 
-    // Get statistics
+    // Get comprehensive statistics
     async getStatistics() {
         try {
             const today = new Date().toISOString().split('T')[0];
-            const stats = await db.getDailyStats(today);
+            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const thisWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+            const thisMonth = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+            // Get today's stats
+            const todayStats = await db.getDailyStats(today);
+            const yesterdayStats = await db.getDailyStats(yesterday);
             
-            const result = {
-                orders: 0,
-                dms_sent: 0,
-                total_members: 0
+            // Get member counts
+            const totalMembers = await db.get('SELECT COUNT(*) as count FROM member_tracking WHERE still_in_server = TRUE');
+            const verifiedMembers = await db.get('SELECT COUNT(*) as count FROM member_tracking WHERE still_in_server = TRUE AND is_verified = TRUE');
+            const newMembersToday = await db.get('SELECT COUNT(*) as count FROM member_tracking WHERE DATE(joined_at) = ?', [today]);
+            const newMembersWeek = await db.get('SELECT COUNT(*) as count FROM member_tracking WHERE DATE(joined_at) >= ?', [thisWeek]);
+            
+            // Get order stats
+            const totalOrders = await db.get('SELECT COUNT(*) as count FROM orders');
+            const ordersToday = await db.get('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) = ?', [today]);
+            const ordersWeek = await db.get('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) >= ?', [thisWeek]);
+            const ordersMonth = await db.get('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) >= ?', [thisMonth]);
+            
+            // Get DM stats
+            const totalDMs = await db.get('SELECT COUNT(*) as count FROM analytics WHERE metric_type = "dm_sent"');
+            const dmsToday = await db.get('SELECT COUNT(*) as count FROM analytics WHERE metric_type = "dm_sent" AND DATE(created_at) = ?', [today]);
+            const dmsWeek = await db.get('SELECT COUNT(*) as count FROM analytics WHERE metric_type = "dm_sent" AND DATE(created_at) >= ?', [thisWeek]);
+            
+            // Get template usage
+            const totalTemplates = await db.get('SELECT COUNT(*) as count FROM embed_templates');
+            const activeTemplates = await db.get('SELECT COUNT(*) as count FROM embed_templates WHERE is_active = TRUE');
+            const totalTemplateSends = await db.get('SELECT SUM(usage_count) as total FROM embed_templates');
+            
+            // Calculate growth rates
+            const memberGrowthRate = yesterdayStats.length > 0 ? 
+                ((newMembersToday.count - (yesterdayStats.find(s => s.metric_type === 'member_join')?.total_count || 0)) / Math.max(1, yesterdayStats.find(s => s.metric_type === 'member_join')?.total_count || 1) * 100).toFixed(1) : '0.0';
+            
+            const orderGrowthRate = yesterdayStats.length > 0 ? 
+                ((ordersToday.count - (yesterdayStats.find(s => s.metric_type === 'order')?.total_count || 0)) / Math.max(1, yesterdayStats.find(s => s.metric_type === 'order')?.total_count || 1) * 100).toFixed(1) : '0.0';
+
+            return {
+                // Member Statistics
+                total_members: totalMembers.count,
+                verified_members: verifiedMembers.count,
+                new_members_today: newMembersToday.count,
+                new_members_week: newMembersWeek.count,
+                member_growth_rate: memberGrowthRate,
+                
+                // Order Statistics
+                total_orders: totalOrders.count,
+                orders_today: ordersToday.count,
+                orders_week: ordersWeek.count,
+                orders_month: ordersMonth.count,
+                order_growth_rate: orderGrowthRate,
+                
+                // DM Statistics
+                total_dms: totalDMs.count,
+                dms_today: dmsToday.count,
+                dms_week: dmsWeek.count,
+                
+                // Template Statistics
+                total_templates: totalTemplates.count,
+                active_templates: activeTemplates.count,
+                total_template_sends: totalTemplateSends.total || 0,
+                
+                // Time Periods
+                periods: { today, yesterday, thisWeek, thisMonth }
             };
-
-            stats.forEach(stat => {
-                if (stat.metric_type === 'order') result.orders = stat.total_count;
-                if (stat.metric_type === 'auto_dm_sent') result.dms_sent = stat.total_count;
-            });
-
-            // Get total members
-            const memberCount = await db.get('SELECT COUNT(*) as count FROM member_tracking WHERE still_in_server = TRUE');
-            result.total_members = memberCount.count;
-
-            return result;
         } catch (error) {
             console.error('❌ Statistics error:', error);
-            return { orders: 0, dms_sent: 0, total_members: 0 };
+            return { 
+                total_members: 0, 
+                verified_members: 0,
+                total_orders: 0,
+                total_dms: 0,
+                total_templates: 0,
+                error: error.message 
+            };
         }
     }
 
