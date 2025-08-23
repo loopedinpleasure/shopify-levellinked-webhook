@@ -434,6 +434,9 @@ class ShopifyDiscordBot {
                 case 'send_statistics':
                     await this.handleStatistics(interaction);
                     break;
+                case 'init_database':
+                    await this.handleDatabaseInit(interaction);
+                    break;
                 default:
                     await interaction.reply({ 
                         content: '⚠️ This feature is not implemented yet.', 
@@ -488,6 +491,43 @@ class ShopifyDiscordBot {
             }
             await interaction.reply({ 
                 content: '❌ Failed to get statistics.', 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Handle database initialization
+    async handleDatabaseInit(interaction) {
+        try {
+            await interaction.reply({ 
+                content: '🔄 Initializing database... This may take a few seconds.', 
+                ephemeral: true 
+            });
+
+            // Import and run database initialization
+            const { initializeDatabase } = require('./database/init');
+            await initializeDatabase();
+
+            // Update member count for logging
+            await this.updateMemberCountForLogging();
+
+            await interaction.editReply({ 
+                content: '✅ Database initialized successfully! All tables created and ready.', 
+                ephemeral: true 
+            });
+
+            // Log the successful initialization
+            if (this.logger) {
+                await this.logger.sendStatusUpdate('Database Initialized', 'All database tables created successfully', '#00ff00');
+            }
+
+        } catch (error) {
+            console.error('❌ Database initialization error:', error);
+            if (this.logger) {
+                await this.logger.logError(error, 'Database initialization');
+            }
+            await interaction.editReply({ 
+                content: `❌ Database initialization failed: ${error.message}`, 
                 ephemeral: true 
             });
         }
