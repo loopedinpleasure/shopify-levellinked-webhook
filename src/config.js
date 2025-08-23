@@ -43,7 +43,7 @@ module.exports = {
         },
         logging: {
             enabled: process.env.ENABLE_LOGGING !== 'false',
-            statusInterval: parseInt(process.env.LOG_STATUS_INTERVAL) || 30, // minutes
+            statusInterval: parseInt(process.env.LOG_STATUS_INTERVAL) || 30, // 30 minutes
             logLevel: process.env.LOG_LEVEL || 'detailed', // basic, detailed, errors
             logOrders: process.env.LOG_ORDERS !== 'false',
             logMembers: process.env.LOG_MEMBERS !== 'false',
