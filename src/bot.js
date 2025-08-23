@@ -146,6 +146,10 @@ class ShopifyDiscordBot {
             this.startAutoDMProcessor();
             console.log('✅ Auto-DM processor started');
 
+            // Schedule daily and weekly summaries
+            this.scheduleSummaries();
+            console.log('✅ Summary scheduling started');
+
             // Update member count for logging
             await this.updateMemberCountForLogging();
 
@@ -351,16 +355,13 @@ class ShopifyDiscordBot {
                 return;
             }
 
-            // Get active auto-DM template
-            const template = await db.getActiveTemplate('auto_dm');
-            if (!template) {
-                console.warn('⚠️ No active auto-DM template found');
-                return;
-            }
+            // Create welcome DM with new embed
+            const { createWelcomeDMEmbed } = require('./discord/embeds');
+            const welcomeEmbed = createWelcomeDMEmbed();
 
             // Send auto-DM
             await member.send({
-                embeds: [createEmbedFromTemplate(template)],
+                embeds: [welcomeEmbed],
                 components: [createOptOutButton()]
             });
 
@@ -369,9 +370,6 @@ class ShopifyDiscordBot {
                 welcome_dm_sent: true, 
                 dm_sent_at: new Date().toISOString() 
             });
-
-            // Update template usage
-            await db.updateTemplateUsage(template.id);
 
             // Record analytics
             await db.recordEvent('auto_dm_sent', 'auto_dm');
@@ -391,6 +389,35 @@ class ShopifyDiscordBot {
                 await this.logger.logError(error, 'Auto-DM processing');
             }
         }
+    }
+
+    // Schedule daily and weekly summaries
+    scheduleSummaries() {
+        // Daily summary at 2:00 AM
+        const dailySchedule = '0 2 * * *';
+        const weeklySchedule = '0 2 * * 1'; // Monday at 2:00 AM
+
+        // Schedule daily summary
+        setInterval(() => {
+            const now = new Date();
+            if (now.getHours() === 2 && now.getMinutes() === 0) {
+                if (this.logger) {
+                    this.logger.sendDailySummary();
+                }
+            }
+        }, 60000); // Check every minute
+
+        // Schedule weekly summary
+        setInterval(() => {
+            const now = new Date();
+            if (now.getDay() === 1 && now.getHours() === 2 && now.getMinutes() === 0) {
+                if (this.logger) {
+                    this.logger.sendWeeklySummary();
+                }
+            }
+        }, 60000); // Check every minute
+
+        console.log('📅 Daily (2:00 AM) and weekly (Monday 2:00 AM) summaries scheduled');
     }
 
     // Start auto-DM processor
