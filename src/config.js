@@ -23,7 +23,7 @@ module.exports = {
     // Bot Features
     features: {
         autoDm: {
-            enabled: process.env.ENABLE_AUTO_DM !== 'false',
+            enabled: process.env.ENABLE_AUTO_DM === 'true', // DISABLED BY DEFAULT FOR SAFETY
             delayMinutes: parseInt(process.env.DM_DELAY_MINUTES) || 65,
             maxPerHour: parseInt(process.env.DM_MAX_PER_HOUR) || 20,
             batchSize: parseInt(process.env.DM_BATCH_SIZE) || 50,
