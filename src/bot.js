@@ -445,10 +445,8 @@ Level up with our special offers!
 https://levellinked.myshopify.com/`;
         
         try {
-            await member.send(welcomeMessage);
-            
-            // Send the opt-out button separately
             await member.send({
+                content: welcomeMessage,
                 components: [createOptOutButton()]
             });
             
@@ -478,10 +476,8 @@ https://levellinked.myshopify.com/`;
                 
                 try {
                     const embed = createEmbedFromTemplate(template);
-                    await member.send({ embeds: [embed] });
-                    
-                    // Send the opt-out button separately
-                    await member.send({
+                    await member.send({ 
+                        embeds: [embed],
                         components: [createOptOutButton()]
                     });
                     
@@ -969,18 +965,16 @@ https://levellinked.myshopify.com/`;
             // Send test DM to the user who clicked
             console.log('🔍 DEBUG: About to send DM with simple text message');
             
-                    // Send simple text message instead of embed
-                const welcomeMessage = `Welcome to **Looped!**
+                            // Send welcome message with opt-out button in a single message
+        const welcomeMessage = `Welcome to **Looped!**
 Level up with our special offers!
 https://levellinked.myshopify.com/`;
-            
-            // Send the welcome message
-            await interaction.user.send(welcomeMessage);
-            
-            // Send the opt-out button separately
-            await interaction.user.send({
-                components: [createOptOutButton()]
-            });
+        
+        // Send the welcome message and opt-out button together
+        await interaction.user.send({
+            content: welcomeMessage,
+            components: [createOptOutButton()]
+        });
 
             console.log('🔍 DEBUG: DM sent successfully');
             await interaction.editReply({ 
