@@ -451,13 +451,14 @@ class ShopifyDiscordBot {
             } else {
                 console.log(`🔍 DEBUG: Using template-based auto-DM for ${userId}`);
                 // Queue the auto-DM using template
+                const { createEmbedFromTemplate, createOptOutButton } = require('./discord/embeds');
                 await this.messageQueue.addMessage({
                     type: 'auto_dm',
                     target_type: 'user',
                     target_id: userId,
                     message_data: JSON.stringify({
-                        embeds: [this.createEmbedFromTemplate(template)],
-                        components: [this.createOptOutButton()]
+                        embeds: [createEmbedFromTemplate(template)],
+                        components: [createOptOutButton()]
                     }),
                     priority: 1
                 });
@@ -3396,33 +3397,4 @@ process.on('SIGINT', () => bot.shutdown());
 // Start the bot
 bot.start().catch(console.error);
 
-// Helper function for embed templates
-function createEmbedFromTemplate(template) {
-    const { EmbedBuilder } = require('discord.js');
-    
-    const embed = new EmbedBuilder()
-        .setTitle(template.title)
-        .setDescription(template.description)
-        .setColor(parseInt(template.color.replace('#', ''), 16))
-        .setTimestamp();
 
-    if (template.image_url) embed.setImage({ url: template.image_url });
-    if (template.thumbnail_url) embed.setThumbnail({ url: template.thumbnail_url });
-    if (template.footer_text) embed.setFooter({ text: template.footer_text });
-
-    return embed;
-}
-
-// Helper function for opt-out button
-function createOptOutButton() {
-    const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-    
-    return new ActionRowBuilder()
-        .addComponents(
-            new ButtonBuilder()
-                .setCustomId('opt_out_marketing')
-                .setLabel('Opt out of marketing DMs')
-                .setEmoji('🚫')
-                .setStyle(ButtonStyle.Secondary)
-        );
-}
