@@ -128,9 +128,7 @@ class MessageQueue {
                 case 'order':
                     success = await this.sendOrderNotification(message);
                     break;
-                case 'auto_dm':
-                    success = await this.sendAutoDM(message);
-                    break;
+
                 case 'custom_dm':
                     success = await this.sendCustomDM(message);
                     break;
@@ -188,38 +186,7 @@ class MessageQueue {
         }
     }
 
-    // Send auto-DM to user
-    async sendAutoDM(message) {
-        try {
-            const messageData = JSON.parse(message.message_data);
-            const user = await this.client.users.fetch(message.target_id);
-            
-            if (!user) {
-                throw new Error('User not found');
-            }
 
-            // Send the welcome message from the queued data
-            if (messageData.welcome_message) {
-                await user.send(messageData.welcome_message);
-            } else {
-                // Fallback to default message
-                const welcomeMessage = `Welcome to **Looped!**
-https://levellinked.myshopify.com/
-Level up with our special offers!`;
-                await user.send(welcomeMessage);
-            }
-            
-            // Send components separately if they exist
-            if (messageData.components && messageData.components.length > 0) {
-                await user.send({ components: messageData.components });
-            }
-
-            return true;
-        } catch (error) {
-            console.error('❌ Failed to send auto-DM:', error);
-            return false;
-        }
-    }
 
     // Send custom DM to user
     async sendCustomDM(message) {
