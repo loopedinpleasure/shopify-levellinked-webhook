@@ -446,9 +446,9 @@ class ShopifyDiscordBot {
                         target_type: 'user',
                         target_id: userId,
                         message_data: JSON.stringify({
-                            welcome_message: `Welcome to **Looped!**
-https://levellinked.myshopify.com/
-Level up with our special offers!`,
+                                                 welcome_message: `Welcome to **Looped!**
+         Level up with our special offers!
+         https://levellinked.myshopify.com/`,
                             components: [createOptOutButton()]
                         }),
                         priority: 1
@@ -457,10 +457,10 @@ Level up with our special offers!`,
                     console.log(`🔍 DEBUG: Welcome DM queued for ${userId}`);
                 } else {
                     console.warn('❌ Message queue not available, sending directly');
-                    // Fallback to direct sending
-                    const welcomeMessage = `Welcome to **Looped!**
-https://levellinked.myshopify.com/
-Level up with our special offers!`;
+                                 // Fallback to direct sending
+             const welcomeMessage = `Welcome to **Looped!**
+             Level up with our special offers!
+             https://levellinked.myshopify.com/`;
                     
                     await member.send(welcomeMessage);
                     
@@ -982,10 +982,10 @@ Level up with our special offers!`;
             // Send test DM to the user who clicked
             console.log('🔍 DEBUG: About to send DM with simple text message');
             
-            // Send simple text message instead of embed
-            const welcomeMessage = `Welcome to **Looped!**
-https://levellinked.myshopify.com/
-Level up with our special offers!`;
+                    // Send simple text message instead of embed
+        const welcomeMessage = `Welcome to **Looped!**
+        Level up with our special offers!
+        https://levellinked.myshopify.com/`;
             
             // Send the welcome message
             await interaction.user.send(welcomeMessage);
