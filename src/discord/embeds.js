@@ -17,6 +17,11 @@ function createPrimaryPlatformEmbed() {
                 name: '🛍️ Features',
                 value: '• Real Orders\n• Auto-DM System\n• Custom Messages\n• Analytics Export',
                 inline: false
+            },
+            {
+                name: '💡 First Time Setup',
+                value: '**Click "🗄️ Init Database" to create required database tables**',
+                inline: false
             }
         )
         .setTimestamp();
@@ -300,7 +305,27 @@ function createHealthCheckEmbed(healthData) {
 
     // Add message queue status
     if (healthData.messageQueue) {
-        const queueStatus = healthData.messageQueue.status === 'operational' ? '✅ Operational' : '❌ Not Initialized';
+        let queueStatus;
+        let statusColor;
+        
+        switch (healthData.messageQueue.status) {
+            case 'operational':
+                queueStatus = '✅ Operational';
+                statusColor = '#00ff00';
+                break;
+            case 'waiting_for_tables':
+                queueStatus = '⏳ Waiting for Tables';
+                statusColor = '#ffaa00';
+                break;
+            case 'error':
+                queueStatus = '❌ Error';
+                statusColor = '#ff0000';
+                break;
+            default:
+                queueStatus = '❓ Unknown';
+                statusColor = '#ffaa00';
+        }
+        
         embed.addFields(
             {
                 name: '📬 Message Queue',
@@ -324,6 +349,15 @@ function createHealthCheckEmbed(healthData) {
                 name: '❌ Failed',
                 value: healthData.messageQueue.failed.toString(),
                 inline: true
+            });
+        }
+        
+        // Add helpful message if waiting for tables
+        if (healthData.messageQueue.status === 'waiting_for_tables') {
+            embed.addFields({
+                name: '💡 Action Required',
+                value: 'Click "🗄️ Init Database" to create required tables',
+                inline: false
             });
         }
     }
