@@ -298,6 +298,9 @@ function createHealthCheckEmbed(healthData) {
 
 // Create welcome DM embed
 function createWelcomeDMEmbed() {
+    console.log('🔍 DEBUG: createWelcomeDMEmbed function called');
+    console.log('🔍 DEBUG: Creating welcome DM embed with correct content');
+    
     const embed = new EmbedBuilder()
         .setTitle('🎉 Welcome to Looped!')
         .setDescription('Welcome to **Looped!**\n\nhttps://levellinked.myshopify.com/\n\nLevel up with our special offers!')
@@ -305,7 +308,24 @@ function createWelcomeDMEmbed() {
         .setTimestamp()
         .setFooter({ text: 'Level up with our special offers!' });
 
+    console.log('🔍 DEBUG: Welcome DM embed created:', {
+        title: embed.data.title,
+        description: embed.data.description,
+        color: embed.data.color,
+        footer: embed.data.footer
+    });
+
     return embed;
+}
+
+// Simple test function to debug welcome message
+function getWelcomeMessageText() {
+    console.log('🔍 DEBUG: getWelcomeMessageText called');
+    return {
+        title: '🎉 Welcome to Looped!',
+        description: 'Welcome to **Looped!**\n\nhttps://levellinked.myshopify.com/\n\nLevel up with our special offers!',
+        color: '#36393f'
+    };
 }
 
 // Get random reaction emojis for order notifications
@@ -350,5 +370,6 @@ module.exports = {
     createStatisticsEmbed,
     createHealthCheckEmbed,
     createWelcomeDMEmbed,
-    getOrderReactions
+    getOrderReactions,
+    getWelcomeMessageText
 };
