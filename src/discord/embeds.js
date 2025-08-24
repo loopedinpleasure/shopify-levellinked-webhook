@@ -302,18 +302,16 @@ function createWelcomeDMEmbed() {
     console.log('🔍 DEBUG: Creating welcome DM embed with correct content based on user feedback');
 
     const embed = new EmbedBuilder()
-        .setTitle('Welcome to Looped!') // Removed emoji
-        .setURL('https://levellinked.myshopify.com/') // Added URL for unfurling and clickable title
-        .setDescription('Welcome to **Looped!**\n\nLevel up with our special offers!') // Simplified description
+        .setTitle('Welcome to Looped!') // No emoji, not clickable
+        .setDescription('Welcome to **Looped!**\n\nhttps://levellinked.myshopify.com/\n\nLevel up with our special offers!') // Full description with link
         .setColor('#36393f') // Discord gray
         .setTimestamp()
-        .setFooter({ text: 'Level Linked' }); // Simplified footer
+        .setFooter({ text: 'Level up with our special offers!' }); // Correct footer
 
     console.log('🔍 DEBUG: Welcome DM embed created:', {
         title: embed.data.title,
         description: embed.data.description,
         color: embed.data.color,
-        url: embed.data.url,
         footer: embed.data.footer
     });
     return embed;
@@ -323,10 +321,9 @@ function createWelcomeDMEmbed() {
 function getWelcomeMessageText() {
     console.log('🔍 DEBUG: getWelcomeMessageText called');
     return {
-        title: 'Welcome to Looped!', // Removed emoji
-        description: 'Welcome to **Looped!**\n\nLevel up with our special offers!', // Simplified description
-        color: '#36393f',
-        url: 'https://levellinked.myshopify.com/'
+        title: 'Welcome to Looped!', // No emoji, not clickable
+        description: 'Welcome to **Looped!**\n\nhttps://levellinked.myshopify.com/\n\nLevel up with our special offers!', // Full description with link
+        color: '#36393f'
     };
 }
 
