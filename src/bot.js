@@ -368,8 +368,22 @@ class ShopifyDiscordBot {
             }
 
             // Create welcome DM with new embed
-            const { createWelcomeDMEmbed } = require('./discord/embeds');
+            console.log('🔍 DEBUG: About to import createWelcomeDMEmbed');
+            const { createWelcomeDMEmbed, createOptOutButton, getWelcomeMessageText } = require('./discord/embeds');
+            console.log('🔍 DEBUG: createWelcomeDMEmbed imported:', typeof createWelcomeDMEmbed);
+            
+            // Test the welcome message text first
+            console.log('🔍 DEBUG: Testing welcome message text');
+            const testMessage = getWelcomeMessageText();
+            console.log('🔍 DEBUG: Test message text:', testMessage);
+            
+            console.log('🔍 DEBUG: Calling createWelcomeDMEmbed()');
             const welcomeEmbed = createWelcomeDMEmbed();
+            console.log('🔍 DEBUG: Welcome embed created:', {
+                title: welcomeEmbed.data.title,
+                description: welcomeEmbed.data.description,
+                color: welcomeEmbed.data.color
+            });
 
             // Send auto-DM
             await member.send({
@@ -820,21 +834,42 @@ class ShopifyDiscordBot {
     // Handle test auto-DM
     async handleTestAutoDM(interaction) {
         try {
+            console.log('🔍 DEBUG: handleTestAutoDM called');
             await interaction.reply({ 
                 content: '📧 Sending test welcome DM...', 
                 ephemeral: true 
             });
 
+            // Clear module cache to ensure fresh import
+            console.log('🔍 DEBUG: Clearing module cache for embeds');
+            delete require.cache[require.resolve('./discord/embeds')];
+            
             // Create welcome DM with new embed
-            const { createWelcomeDMEmbed, createOptOutButton } = require('./discord/embeds');
+            console.log('🔍 DEBUG: About to import createWelcomeDMEmbed');
+            const { createWelcomeDMEmbed, createOptOutButton, getWelcomeMessageText } = require('./discord/embeds');
+            console.log('🔍 DEBUG: createWelcomeDMEmbed imported:', typeof createWelcomeDMEmbed);
+            
+            // Test the welcome message text first
+            console.log('🔍 DEBUG: Testing welcome message text');
+            const testMessage = getWelcomeMessageText();
+            console.log('🔍 DEBUG: Test message text:', testMessage);
+            
+            console.log('🔍 DEBUG: Calling createWelcomeDMEmbed()');
             const welcomeEmbed = createWelcomeDMEmbed();
+            console.log('🔍 DEBUG: Welcome embed created:', {
+                title: welcomeEmbed.data.title,
+                description: welcomeEmbed.data.description,
+                color: welcomeEmbed.data.color
+            });
 
             // Send test DM to the user who clicked
+            console.log('🔍 DEBUG: About to send DM with embed');
             await interaction.user.send({
                 embeds: [welcomeEmbed],
                 components: [createOptOutButton()]
             });
 
+            console.log('🔍 DEBUG: DM sent successfully');
             await interaction.editReply({ 
                 content: '✅ Test welcome DM sent successfully! Check your DMs.', 
                 ephemeral: true 
