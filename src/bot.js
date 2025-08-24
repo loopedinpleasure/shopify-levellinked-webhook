@@ -919,11 +919,15 @@ class ShopifyDiscordBot {
 
             // Send test DM to the user who clicked
             console.log('🔍 DEBUG: About to send DM with embed');
+            
+            // Send the embed first
             await interaction.user.send({
-                content: 'https://levellinked.myshopify.com/',
                 embeds: [welcomeEmbed],
                 components: [createOptOutButton()]
             });
+            
+            // Then send the link separately to ensure it shows as a preview
+            await interaction.user.send('https://levellinked.myshopify.com/');
 
             console.log('🔍 DEBUG: DM sent successfully');
             await interaction.editReply({ 
