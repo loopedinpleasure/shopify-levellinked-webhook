@@ -304,10 +304,9 @@ function createWelcomeDMEmbed() {
     // Create a simple embed without duplicating the title in description
     const embed = new EmbedBuilder()
         .setTitle('Welcome to Looped!') // No emoji, not clickable
-        .setDescription('https://levellinked.myshopify.com/\n\nLevel up with our special offers!') // Just the link and call-to-action
+        .setDescription('Level up with our special offers!') // Just the call-to-action
         .setColor('#36393f') // Discord gray
-        .setTimestamp()
-        .setFooter({ text: 'Level Linked' }); // Simple footer
+        // No footer needed - clean and simple
 
     console.log('🔍 DEBUG: Welcome DM embed created:', {
         title: embed.data.title,
@@ -327,7 +326,7 @@ function getWelcomeMessageText() {
     console.log('🔍 DEBUG: getWelcomeMessageText called');
     return {
         title: 'Welcome to Looped!', // No emoji, not clickable
-        description: 'https://levellinked.myshopify.com/\n\nLevel up with our special offers!', // Just the link and call-to-action
+        description: 'Level up with our special offers!', // Just the call-to-action
         color: '#36393f'
     };
 }
