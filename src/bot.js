@@ -226,44 +226,44 @@ class ShopifyDiscordBot {
     // Track new member
     async trackNewMember(member) {
         try {
-            const isVerified = member.roles.cache.has(config.discord.verifiedRoleId);
-            const hasClosedDms = member.roles.cache.has(config.discord.closedDmsRoleId);
+            console.log(`🔍 DEBUG: trackNewMember called for ${member.user.tag} (${member.user.id})`);
+            
+            const query = `
+                INSERT OR REPLACE INTO member_tracking (
+                    user_id, username, joined_at, is_verified, has_closed_dms_role, still_in_server
+                ) VALUES (?, ?, datetime('now'), ?, ?, TRUE)
+            `;
+            
+            const isVerified = member.roles.cache.has(process.env.VERIFIED_ROLE_ID);
+            const hasClosedDms = member.roles.cache.has(process.env.CLOSED_DMS_ROLE_ID);
+            
+            console.log(`🔍 DEBUG: Member verification status:`, isVerified);
+            console.log(`🔍 DEBUG: Member has closed DMs role:`, hasClosedDms);
+            console.log(`🔍 DEBUG: Looking for verified role ID:`, process.env.VERIFIED_ROLE_ID);
+            console.log(`🔍 DEBUG: Looking for closed DMs role ID:`, process.env.CLOSED_DMS_ROLE_ID);
+            
+            await this.db.run(query, [member.user.id, member.user.tag, isVerified, hasClosedDms]);
+            console.log(`🔍 DEBUG: Member tracking data inserted for ${member.user.id}`);
 
-            await db.trackMember(
-                member.user.id,
-                member.user.tag,
-                isVerified,
-                hasClosedDms
-            );
-
-            console.log(`👤 New member tracked: ${member.user.tag}`);
-
-            // Log member activity
-            if (this.logger) {
-                await this.logger.logMemberActivity('Joined', member, {
-                    reason: `New member joined the server`,
-                    role: isVerified ? 'Verified' : 'Unverified'
-                });
+            // Schedule auto-DM for 65 minutes later if not closed DMs
+            if (!hasClosedDms) {
+                console.log(`🔍 DEBUG: Scheduling auto-DM for ${member.user.id} (no closed DMs role)`);
+                const delayMs = 65 * 60 * 1000; // 65 minutes
+                this.scheduleAutoDM(member.user.id, delayMs);
+                console.log(`🔍 DEBUG: Auto-DM scheduled for ${member.user.id} in ${delayMs}ms (${delayMs/1000/60} minutes)`);
+            } else {
+                console.log(`🔍 DEBUG: Skipping auto-DM for ${member.user.id} (has closed DMs role)`);
             }
 
-            // Schedule auto-DM if eligible (DISABLED BY DEFAULT)
-            if (!hasClosedDms && config.features.autoDm.enabled) {
-                // Auto-DM scheduling is DISABLED by default for safety
-                console.log(`⏰ Auto-DM scheduled for user ${member.user.id} but system is DISABLED by default`);
-                // this.scheduleAutoDM(member.user.id); // COMMENTED OUT FOR SAFETY
+            // Track for analytics
+            if (this.analytics) {
+                await this.analytics.recordEvent('member_join', 'organic');
+                console.log(`🔍 DEBUG: Analytics recorded for member join: ${member.user.id}`);
             }
-
-            // Record analytics
-            await db.recordEvent('member_join', 'organic');
-
-            // Update member count for logging
-            await this.updateMemberCountForLogging();
-
+            
+            console.log(`🔍 DEBUG: trackNewMember completed for ${member.user.id}`);
         } catch (error) {
-            console.error('❌ Error tracking new member:', error);
-            if (this.logger) {
-                await this.logger.logError(error, 'Member tracking');
-            }
+            console.error(`🔍 DEBUG: Failed to track new member ${member.user.id}:`, error);
         }
     }
 
@@ -335,85 +335,139 @@ class ShopifyDiscordBot {
     }
 
     // Schedule auto-DM
-    scheduleAutoDM(userId) {
-        const delayMs = config.features.autoDm.delayMinutes * 60 * 1000;
+    scheduleAutoDM(userId, delayMs) {
+        console.log(`🔍 DEBUG: scheduleAutoDM called for user ${userId} with delay ${delayMs}ms (${delayMs/1000/60} minutes)`);
         
         setTimeout(async () => {
+            console.log(`🔍 DEBUG: Auto-DM timeout triggered for user ${userId}, calling processAutoDM`);
             await this.processAutoDM(userId);
         }, delayMs);
 
-        console.log(`⏰ Auto-DM scheduled for user ${userId} in ${config.features.autoDm.delayMinutes} minutes`);
+        console.log(`⏰ Auto-DM scheduled for user ${userId} in ${delayMs}ms (${delayMs/1000/60} minutes)`);
     }
 
     // Process auto-DM
     async processAutoDM(userId) {
         try {
-            // Check if member is still eligible
-            const member = await this.client.guilds.cache.get(config.discord.guildId)?.members.fetch(userId).catch(() => null);
+            console.log(`🔍 DEBUG: processAutoDM called for user ${userId}`);
+            
+            // Verify member is still in server and verified
+            const guild = this.client.guilds.cache.get(process.env.GUILD_ID);
+            console.log(`🔍 DEBUG: Guild found:`, guild ? guild.name : 'NOT FOUND');
+            
+            const member = await guild.members.fetch(userId).catch((error) => {
+                console.log(`🔍 DEBUG: Failed to fetch member ${userId}:`, error.message);
+                return null;
+            });
+            
             if (!member) {
+                console.log(`🔍 DEBUG: Member ${userId} not found in guild, marking as left`);
                 await this.markMemberAsLeft(userId);
                 return;
             }
+            
+            console.log(`🔍 DEBUG: Member found: ${member.user.tag} (${member.user.id})`);
+            console.log(`🔍 DEBUG: Member roles:`, member.roles.cache.map(r => r.name).join(', '));
 
-            // Check compliance requirements
-            const memberData = await db.getMember(userId);
-            if (!memberData || memberData.welcome_dm_sent || memberData.has_closed_dms_role) {
+            // Check all compliance requirements
+            const memberData = await this.db.get(
+                'SELECT * FROM member_tracking WHERE user_id = ?',
+                [userId]
+            );
+            
+            console.log(`🔍 DEBUG: Member tracking data:`, memberData);
+            
+            if (!memberData) {
+                console.log(`🔍 DEBUG: No member tracking data found for ${userId}`);
+                return;
+            }
+            
+            if (memberData.welcome_dm_sent) {
+                console.log(`🔍 DEBUG: Welcome DM already sent for ${userId}`);
+                return;
+            }
+            
+            if (memberData.has_closed_dms_role) {
+                console.log(`🔍 DEBUG: Member ${userId} has closed DMs role, skipping`);
                 return;
             }
 
             // Check if member is verified
-            if (!member.roles.cache.has(config.discord.verifiedRoleId)) {
-                console.log(`⏳ Member ${userId} not verified yet, skipping auto-DM`);
+            const isVerified = member.roles.cache.has(process.env.VERIFIED_ROLE_ID);
+            console.log(`🔍 DEBUG: Member verification status:`, isVerified);
+            console.log(`🔍 DEBUG: Looking for verified role ID:`, process.env.VERIFIED_ROLE_ID);
+            
+            if (!isVerified) {
+                console.log(`🔍 DEBUG: Member ${userId} not verified yet, skipping auto-DM`);
                 return;
             }
 
-            // Create welcome DM with new embed
-            console.log('🔍 DEBUG: About to import createWelcomeDMEmbed');
-            const { createWelcomeDMEmbed, createOptOutButton, getWelcomeMessageText } = require('./discord/embeds');
-            console.log('🔍 DEBUG: createWelcomeDMEmbed imported:', typeof createWelcomeDMEmbed);
+            // Get active auto-DM template
+            const template = await this.db.get(
+                'SELECT * FROM embed_templates WHERE template_type = ? AND is_active = TRUE',
+                ['auto_dm']
+            );
             
-            // Test the welcome message text first
-            console.log('🔍 DEBUG: Testing welcome message text');
-            const testMessage = getWelcomeMessageText();
-            console.log('🔍 DEBUG: Test message text:', testMessage);
+            console.log(`🔍 DEBUG: Auto-DM template found:`, template);
             
-            console.log('🔍 DEBUG: Calling createWelcomeDMEmbed()');
-            const welcomeEmbed = createWelcomeDMEmbed();
-            console.log('🔍 DEBUG: Welcome embed created:', {
-                title: welcomeEmbed.data.title,
-                description: welcomeEmbed.data.description,
-                color: welcomeEmbed.data.color
-            });
-
-            // Send auto-DM
-            await member.send({
-                embeds: [welcomeEmbed],
-                components: [createOptOutButton()]
-            });
-
-            // Mark as sent
-            await db.updateMemberStatus(userId, { 
-                welcome_dm_sent: true, 
-                dm_sent_at: new Date().toISOString() 
-            });
-
-            // Record analytics
-            await db.recordEvent('auto_dm_sent', 'auto_dm');
-
-            // Log DM activity
-            if (this.logger) {
-                await this.logger.logDM(userId, member.user.tag, 'Sent', {
-                    type: 'Auto-DM (Welcome)'
+            if (!template) {
+                console.log(`🔍 DEBUG: No active auto-DM template found, creating default welcome embed`);
+                
+                // Clear module cache to ensure fresh import
+                delete require.cache[require.resolve('./discord/embeds')];
+                const { createWelcomeDMEmbed, createOptOutButton } = require('./discord/embeds');
+                
+                console.log(`🔍 DEBUG: About to create welcome embed for ${userId}`);
+                const welcomeEmbed = createWelcomeDMEmbed();
+                console.log(`🔍 DEBUG: Welcome embed created for ${userId}:`, {
+                    title: welcomeEmbed.data.title,
+                    description: welcomeEmbed.data.description,
+                    color: welcomeEmbed.data.color
                 });
+
+                // Send the welcome DM directly
+                console.log(`🔍 DEBUG: About to send welcome DM to ${userId}`);
+                await member.send({
+                    embeds: [welcomeEmbed],
+                    components: [createOptOutButton()]
+                });
+                
+                console.log(`🔍 DEBUG: Welcome DM sent successfully to ${userId}`);
+
+                // Mark as sent
+                await this.db.run(
+                    'UPDATE member_tracking SET welcome_dm_sent = TRUE, dm_sent_at = datetime("now") WHERE user_id = ?',
+                    [userId]
+                );
+                
+                console.log(`🔍 DEBUG: Member tracking updated for ${userId}`);
+                
+                // Record analytics
+                if (this.analytics) {
+                    await this.analytics.recordEvent('auto_dm_sent', 'auto_dm');
+                }
+                
+                console.log(`🔍 DEBUG: Analytics recorded for ${userId}`);
+            } else {
+                console.log(`🔍 DEBUG: Using template-based auto-DM for ${userId}`);
+                // Queue the auto-DM using template
+                await this.messageQueue.addMessage({
+                    type: 'auto_dm',
+                    target_type: 'user',
+                    target_id: userId,
+                    message_data: JSON.stringify({
+                        embeds: [this.createEmbedFromTemplate(template)],
+                        components: [this.createOptOutButton()]
+                    }),
+                    priority: 1
+                });
+                
+                console.log(`🔍 DEBUG: Template-based auto-DM queued for ${userId}`);
             }
 
-            console.log(`✅ Auto-DM sent to ${member.user.tag}`);
-
+            console.log(`🔍 DEBUG: processAutoDM completed successfully for ${userId}`);
         } catch (error) {
-            console.error(`❌ Failed to process auto-DM for user ${userId}:`, error);
-            if (this.logger) {
-                await this.logger.logError(error, 'Auto-DM processing');
-            }
+            console.error(`🔍 DEBUG: Failed to process auto-DM for user ${userId}:`, error);
         }
     }
 
