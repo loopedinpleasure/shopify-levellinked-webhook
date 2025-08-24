@@ -34,9 +34,17 @@ class ShopifyDiscordBot {
         this.isReady = false;
         this.startTime = Date.now();
 
+        // Store pending data for button interactions
+        this.pendingData = new Map();
+
         // Setup event handlers
         this.setupEventHandlers();
         this.setupExpressRoutes();
+
+        // Start pending data cleanup (every hour)
+        setInterval(() => this.cleanupPendingData(), 60 * 60 * 1000);
+
+        console.log('🎉 Bot fully initialized and ready!');
     }
 
     // Setup Discord event handlers
@@ -1617,6 +1625,15 @@ Focus on actionable insights that can improve business performance.`;
             // Extract message text
             const messageText = interaction.fields.getTextInputValue('message_text');
             
+            // Generate unique ID for this message
+            const messageId = Date.now().toString();
+            
+            // Store message data for later sending
+            this.pendingData.set(messageId, {
+                type: 'channel_message',
+                message: messageText
+            });
+            
             // Create preview embed in control panel
             const previewEmbed = new EmbedBuilder()
                 .setTitle('📝 Message Preview')
@@ -1633,7 +1650,7 @@ Focus on actionable insights that can improve business performance.`;
             const actionButtons = new ActionRowBuilder()
                 .addComponents(
                     new ButtonBuilder()
-                        .setCustomId(`send_message_${Buffer.from(messageText).toString('base64').substring(0, 50)}`)
+                        .setCustomId(`send_message_${messageId}`)
                         .setLabel('✅ Send Message')
                         .setStyle(ButtonStyle.Success),
                     new ButtonBuilder()
@@ -1641,9 +1658,6 @@ Focus on actionable insights that can improve business performance.`;
                         .setLabel('❌ Don\'t Send')
                         .setStyle(ButtonStyle.Danger)
                 );
-
-            // Store message for later sending
-            interaction.pendingMessage = messageText;
 
             // Send preview with buttons
             await interaction.reply({
@@ -1664,10 +1678,13 @@ Focus on actionable insights that can improve business performance.`;
     // Handle send message button
     async handleSendMessage(interaction, customId) {
         try {
-            // Get pending message from interaction
-            const messageText = interaction.pendingMessage;
+            // Extract message ID from custom ID
+            const messageId = customId.replace('send_message_', '');
             
-            if (!messageText) {
+            // Get pending message data from storage
+            const pendingData = this.pendingData.get(messageId);
+            
+            if (!pendingData || pendingData.type !== 'channel_message') {
                 await interaction.reply({
                     content: '❌ No message to send. Please try again.',
                     ephemeral: true
@@ -1687,7 +1704,7 @@ Focus on actionable insights that can improve business performance.`;
             }
 
             // Send the message to notification channel
-            await notificationChannel.send(messageText);
+            await notificationChannel.send(pendingData.message);
 
             // Update the interaction to show success
             await interaction.update({
@@ -1695,6 +1712,9 @@ Focus on actionable insights that can improve business performance.`;
                 embeds: [],
                 components: []
             });
+
+            // Clean up pending data
+            this.pendingData.delete(messageId);
 
             // Log the message sending
             if (this.logger) {
@@ -1720,8 +1740,8 @@ Focus on actionable insights that can improve business performance.`;
                 components: []
             });
 
-            // Clear pending message
-            interaction.pendingMessage = null;
+            // Note: We can't clean up pending data here since we don't have the messageId
+            // The data will be cleaned up when the send button is pressed or will expire naturally
 
         } catch (error) {
             console.error('❌ Don\'t send message error:', error);
@@ -1781,6 +1801,17 @@ Focus on actionable insights that can improve business performance.`;
                 return;
             }
 
+            // Generate unique ID for this DM
+            const dmId = Date.now().toString();
+            
+            // Store DM data for later sending
+            this.pendingData.set(dmId, {
+                type: 'single_dm',
+                userId: targetUserId,
+                username: targetUser.tag,
+                message: messageText
+            });
+
             // Create preview embed
             const previewEmbed = new EmbedBuilder()
                 .setTitle('👤 DM Preview')
@@ -1804,7 +1835,7 @@ Focus on actionable insights that can improve business performance.`;
             const actionButtons = new ActionRowBuilder()
                 .addComponents(
                     new ButtonBuilder()
-                        .setCustomId(`send_dm_${targetUserId}_${Buffer.from(messageText).toString('base64').substring(0, 50)}`)
+                        .setCustomId(`send_dm_${dmId}`)
                         .setLabel('✅ Send DM')
                         .setStyle(ButtonStyle.Success),
                     new ButtonBuilder()
@@ -1812,13 +1843,6 @@ Focus on actionable insights that can improve business performance.`;
                         .setLabel('❌ Don\'t Send')
                         .setStyle(ButtonStyle.Danger)
                 );
-
-            // Store data for later sending
-            interaction.pendingDM = {
-                userId: targetUserId,
-                username: targetUser.tag,
-                message: messageText
-            };
 
             // Send preview with buttons
             await interaction.reply({
@@ -1839,10 +1863,13 @@ Focus on actionable insights that can improve business performance.`;
     // Handle send DM button
     async handleSendDM(interaction, customId) {
         try {
-            // Get pending DM data from interaction
-            const pendingDM = interaction.pendingDM;
+            // Extract DM ID from custom ID
+            const dmId = customId.replace('send_dm_', '');
             
-            if (!pendingDM) {
+            // Get pending DM data from storage
+            const pendingData = this.pendingData.get(dmId);
+            
+            if (!pendingData || pendingData.type !== 'single_dm') {
                 await interaction.reply({
                     content: '❌ No DM data to send. Please try again.',
                     ephemeral: true
@@ -1852,55 +1879,61 @@ Focus on actionable insights that can improve business performance.`;
 
             // Try to send the DM
             try {
-                const targetUser = await this.client.users.fetch(pendingDM.userId);
-                await targetUser.send(pendingDM.message);
+                const targetUser = await this.client.users.fetch(pendingData.userId);
+                await targetUser.send(pendingData.message);
                 
                 // Update the interaction to show success
                 await interaction.update({
-                    content: `✅ **DM sent successfully to ${pendingDM.username}!**`,
+                    content: `✅ **DM sent successfully to ${pendingData.username}!**`,
                     embeds: [],
                     components: []
                 });
 
+                // Clean up pending data
+                this.pendingData.delete(dmId);
+
                 // Log the DM sending
                 if (this.logger) {
-                    await this.logger.logDM(pendingDM.userId, pendingDM.username, 'Sent', {
+                    await this.logger.logDM(pendingData.userId, pendingData.username, 'Sent', {
                         type: 'Manual DM',
-                        message: pendingDM.message.substring(0, 100) + (pendingDM.message.length > 100 ? '...' : '')
+                        message: pendingData.message.substring(0, 100) + (pendingData.message.length > 100 ? '...' : '')
                     });
                 }
 
                 // Record analytics
                 await db.recordEvent('dm_sent', 'manual');
 
-                console.log(`✅ DM sent to ${pendingDM.username} (${pendingDM.userId})`);
+                console.log(`✅ DM sent to ${pendingData.username} (${pendingData.userId})`);
 
             } catch (dmError) {
                 if (dmError.code === 50007) {
                     // User has DMs disabled
                     await interaction.update({
-                        content: `❌ **Failed to send DM to ${pendingDM.username}**\n\n**Reason:** User has DMs disabled for this server.`,
+                        content: `❌ **Failed to send DM to ${pendingData.username}**\n\n**Reason:** User has DMs disabled for this server.`,
                         embeds: [],
                         components: []
                     });
                 } else {
                     // Other error
                     await interaction.update({
-                        content: `❌ **Failed to send DM to ${pendingDM.username}**\n\n**Error:** ${dmError.message}`,
+                        content: `❌ **Failed to send DM to ${pendingData.username}**\n\n**Error:** ${dmError.message}`,
                         embeds: [],
                         components: []
                     });
                 }
 
+                // Clean up pending data even on failure
+                this.pendingData.delete(dmId);
+
                 // Log the DM failure
                 if (this.logger) {
-                    await this.logger.logDM(pendingDM.userId, pendingDM.username, 'Failed', {
+                    await this.logger.logDM(pendingData.userId, pendingData.username, 'Failed', {
                         type: 'Manual DM',
                         error: dmError.message
                     });
                 }
 
-                console.error(`❌ Failed to send DM to ${pendingDM.username}:`, dmError);
+                console.error(`❌ Failed to send DM to ${pendingData.username}:`, dmError);
             }
 
         } catch (error) {
@@ -1922,8 +1955,8 @@ Focus on actionable insights that can improve business performance.`;
                 components: []
             });
 
-            // Clear pending DM data
-            interaction.pendingDM = null;
+            // Note: We can't clean up pending data here since we don't have the dmId
+            // The data will be cleaned up when the send button is pressed or will expire naturally
 
         } catch (error) {
             console.error('❌ Don\'t send DM error:', error);
@@ -3213,6 +3246,36 @@ Focus on actionable insights that can improve business performance.`;
         }
         
         process.exit(0);
+    }
+
+    // Cleanup pending data
+    async cleanupPendingData() {
+        try {
+            const now = Date.now();
+            const oneHourAgo = now - (60 * 60 * 1000); // 1 hour ago
+            
+            let cleanedCount = 0;
+            
+            // Clean up old pending data (older than 1 hour)
+            for (const [id, data] of this.pendingData.entries()) {
+                // Extract timestamp from ID (we use Date.now() for IDs)
+                const timestamp = parseInt(id);
+                if (timestamp < oneHourAgo) {
+                    this.pendingData.delete(id);
+                    cleanedCount++;
+                }
+            }
+            
+            if (cleanedCount > 0) {
+                console.log(`🧹 Cleaned up ${cleanedCount} old pending data entries`);
+            }
+            
+            // Log current pending data count
+            console.log(`📊 Current pending data entries: ${this.pendingData.size}`);
+            
+        } catch (error) {
+            console.error('❌ Pending data cleanup error:', error);
+        }
     }
 }
 
