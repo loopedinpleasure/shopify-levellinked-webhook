@@ -920,6 +920,7 @@ class ShopifyDiscordBot {
             // Send test DM to the user who clicked
             console.log('🔍 DEBUG: About to send DM with embed');
             await interaction.user.send({
+                content: 'https://levellinked.myshopify.com/',
                 embeds: [welcomeEmbed],
                 components: [createOptOutButton()]
             });
