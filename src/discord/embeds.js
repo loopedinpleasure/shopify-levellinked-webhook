@@ -300,7 +300,7 @@ function createHealthCheckEmbed(healthData) {
 function createWelcomeDMEmbed() {
     const embed = new EmbedBuilder()
         .setTitle('🎉 Welcome to **Looped!**')
-        .setDescription('https://levellinked.myshopify.com/')
+        .setDescription('Welcome to **Looped!**\n\nhttps://levellinked.myshopify.com/\n\nLevel up with our special offers!')
         .setColor('#36393f') // Discord gray
         .setTimestamp()
         .setFooter({ text: 'Level up with our special offers!' });
