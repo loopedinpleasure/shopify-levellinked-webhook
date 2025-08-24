@@ -437,40 +437,25 @@ class ShopifyDiscordBot {
                     color: welcomeEmbed.data.color
                 });
 
-                // Queue the welcome DM instead of sending directly
-                console.log(`🔍 DEBUG: About to queue welcome DM for ${userId}`);
-                
-                if (this.messageQueue) {
-                    await this.messageQueue.addMessage({
-                        type: 'auto_dm',
-                        target_type: 'user',
-                        target_id: userId,
-                        message_data: JSON.stringify({
-                                                 welcome_message: `Welcome to **Looped!**
-         Level up with our special offers!
-         https://levellinked.myshopify.com/`,
-                            components: [createOptOutButton()]
-                        }),
-                        priority: 1
-                    });
-                    
-                    console.log(`🔍 DEBUG: Welcome DM queued for ${userId}`);
-                } else {
-                    console.warn('❌ Message queue not available, sending directly');
-                                 // Fallback to direct sending
-             const welcomeMessage = `Welcome to **Looped!**
-             Level up with our special offers!
-             https://levellinked.myshopify.com/`;
-                    
-                    await member.send(welcomeMessage);
-                    
-                    // Send the opt-out button separately
-                    await member.send({
-                        components: [createOptOutButton()]
-                    });
-                    
-                    console.log(`🔍 DEBUG: Welcome DM sent directly to ${userId} (fallback)`);
-                }
+                        // Send welcome DM directly (no queuing needed)
+        console.log(`🔍 DEBUG: Sending welcome DM directly to ${userId}`);
+        
+        const welcomeMessage = `Welcome to **Looped!**
+Level up with our special offers!
+https://levellinked.myshopify.com/`;
+        
+        try {
+            await member.send(welcomeMessage);
+            
+            // Send the opt-out button separately
+            await member.send({
+                components: [createOptOutButton()]
+            });
+            
+            console.log(`🔍 DEBUG: Welcome DM sent directly to ${userId}`);
+        } catch (error) {
+            console.error(`Failed to send welcome DM to ${userId}:`, error);
+        }
 
                 // Mark as sent
                 await this.db.run(
@@ -488,20 +473,22 @@ class ShopifyDiscordBot {
                 console.log(`🔍 DEBUG: Analytics recorded for ${userId}`);
             } else {
                 console.log(`🔍 DEBUG: Using template-based auto-DM for ${userId}`);
-                // Queue the auto-DM using template
+                // Send template-based auto-DM directly
                 const { createEmbedFromTemplate, createOptOutButton } = require('./discord/embeds');
-                await this.messageQueue.addMessage({
-                    type: 'auto_dm',
-                    target_type: 'user',
-                    target_id: userId,
-                    message_data: JSON.stringify({
-                        embeds: [createEmbedFromTemplate(template)],
-                        components: [createOptOutButton()]
-                    }),
-                    priority: 1
-                });
                 
-                console.log(`🔍 DEBUG: Template-based auto-DM queued for ${userId}`);
+                try {
+                    const embed = createEmbedFromTemplate(template);
+                    await member.send({ embeds: [embed] });
+                    
+                    // Send the opt-out button separately
+                    await member.send({
+                        components: [createOptOutButton()]
+                    });
+                    
+                    console.log(`🔍 DEBUG: Template-based auto-DM sent directly to ${userId}`);
+                } catch (error) {
+                    console.error(`Failed to send template-based auto-DM to ${userId}:`, error);
+                }
             }
 
             console.log(`🔍 DEBUG: processAutoDM completed successfully for ${userId}`);
@@ -983,9 +970,9 @@ class ShopifyDiscordBot {
             console.log('🔍 DEBUG: About to send DM with simple text message');
             
                     // Send simple text message instead of embed
-        const welcomeMessage = `Welcome to **Looped!**
-        Level up with our special offers!
-        https://levellinked.myshopify.com/`;
+                const welcomeMessage = `Welcome to **Looped!**
+Level up with our special offers!
+https://levellinked.myshopify.com/`;
             
             // Send the welcome message
             await interaction.user.send(welcomeMessage);
