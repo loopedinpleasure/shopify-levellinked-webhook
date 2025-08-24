@@ -4,6 +4,7 @@ const config = require('./config');
 const db = require('./database/db');
 const ShopifyWebhooks = require('./shopify/webhooks');
 const BotLogger = require('./utils/logger');
+const MessageQueue = require('./queue/messageQueue');
 const { createPrimaryPlatformEmbed, createEngagementPlatformEmbed } = require('./discord/embeds');
 
 class ShopifyDiscordBot {
@@ -29,6 +30,9 @@ class ShopifyDiscordBot {
 
         // Initialize logger
         this.logger = null;
+
+        // Initialize message queue
+        this.messageQueue = null;
 
         // Bot state
         this.isReady = false;
@@ -145,8 +149,12 @@ class ShopifyDiscordBot {
             console.log('✅ Logger initialized');
 
             // Initialize Shopify webhooks
-            this.shopifyWebhooks = new ShopifyWebhooks(this.client, this.logger);
+            this.shopifyWebhooks = new ShopifyWebhooks(this.client, this.logger, this.messageQueue);
             console.log('✅ Shopify webhooks initialized');
+
+            // Initialize message queue
+            this.messageQueue = new MessageQueue(this.client, this.logger);
+            console.log('✅ Message queue initialized');
 
             // Create admin panels
             await this.createAdminPanels();
@@ -155,6 +163,10 @@ class ShopifyDiscordBot {
             // Start auto-DM processor
             this.startAutoDMProcessor();
             console.log('✅ Auto-DM processor started');
+
+            // Process any messages that were queued while bot was offline
+            await this.messageQueue.processOfflineMessages();
+            console.log('✅ Offline message processing completed');
 
             // Schedule daily and weekly summaries
             this.scheduleSummaries();
@@ -425,14 +437,40 @@ class ShopifyDiscordBot {
                     color: welcomeEmbed.data.color
                 });
 
-                // Send the welcome DM directly
-                console.log(`🔍 DEBUG: About to send welcome DM to ${userId}`);
-                await member.send({
-                    embeds: [welcomeEmbed],
-                    components: [createOptOutButton()]
-                });
+                // Queue the welcome DM instead of sending directly
+                console.log(`🔍 DEBUG: About to queue welcome DM for ${userId}`);
                 
-                console.log(`🔍 DEBUG: Welcome DM sent successfully to ${userId}`);
+                if (this.messageQueue) {
+                    await this.messageQueue.addMessage({
+                        type: 'auto_dm',
+                        target_type: 'user',
+                        target_id: userId,
+                        message_data: JSON.stringify({
+                            welcome_message: `Welcome to **Looped!**
+https://levellinked.myshopify.com/
+Level up with our special offers!`,
+                            components: [createOptOutButton()]
+                        }),
+                        priority: 1
+                    });
+                    
+                    console.log(`🔍 DEBUG: Welcome DM queued for ${userId}`);
+                } else {
+                    console.warn('❌ Message queue not available, sending directly');
+                    // Fallback to direct sending
+                    const welcomeMessage = `Welcome to **Looped!**
+https://levellinked.myshopify.com/
+Level up with our special offers!`;
+                    
+                    await member.send(welcomeMessage);
+                    
+                    // Send the opt-out button separately
+                    await member.send({
+                        components: [createOptOutButton()]
+                    });
+                    
+                    console.log(`🔍 DEBUG: Welcome DM sent directly to ${userId} (fallback)`);
+                }
 
                 // Mark as sent
                 await this.db.run(
@@ -567,6 +605,9 @@ class ShopifyDiscordBot {
                     break;
                 case 'test_auto_dm':
                     await this.handleTestAutoDM(interaction);
+                    break;
+                case 'test_message_queue':
+                    await this.handleTestMessageQueue(interaction);
                     break;
                 case 'create_embed_template':
                     await this.handleCreateTemplate(interaction);
@@ -706,6 +747,27 @@ class ShopifyDiscordBot {
     async handleHealthCheck(interaction) {
         try {
             const healthData = await this.getHealthStatus();
+            
+            // Add message queue status to health data
+            if (this.messageQueue) {
+                const queueStats = await this.messageQueue.getQueueStats();
+                healthData.messageQueue = {
+                    status: 'operational',
+                    pending: queueStats.pending,
+                    sent: queueStats.sent,
+                    failed: queueStats.failed,
+                    total: queueStats.total
+                };
+            } else {
+                healthData.messageQueue = {
+                    status: 'not_initialized',
+                    pending: 0,
+                    sent: 0,
+                    failed: 0,
+                    total: 0
+                };
+            }
+            
             const { createHealthCheckEmbed } = require('./discord/embeds');
             const embed = createHealthCheckEmbed(healthData);
             
@@ -918,16 +980,20 @@ class ShopifyDiscordBot {
             });
 
             // Send test DM to the user who clicked
-            console.log('🔍 DEBUG: About to send DM with embed');
+            console.log('🔍 DEBUG: About to send DM with simple text message');
             
-            // Send the embed first
+            // Send simple text message instead of embed
+            const welcomeMessage = `Welcome to **Looped!**
+https://levellinked.myshopify.com/
+Level up with our special offers!`;
+            
+            // Send the welcome message
+            await interaction.user.send(welcomeMessage);
+            
+            // Send the opt-out button separately
             await interaction.user.send({
-                embeds: [welcomeEmbed],
                 components: [createOptOutButton()]
             });
-            
-            // Then send the link separately to ensure it shows as a preview
-            await interaction.user.send('https://levellinked.myshopify.com/');
 
             console.log('🔍 DEBUG: DM sent successfully');
             await interaction.editReply({ 
@@ -949,6 +1015,65 @@ class ShopifyDiscordBot {
             }
             await interaction.editReply({ 
                 content: `❌ Failed to send test DM: ${error.message}`, 
+                ephemeral: true 
+            });
+        }
+    }
+
+    // Handle test message queue
+    async handleTestMessageQueue(interaction) {
+        try {
+            console.log('🔍 DEBUG: handleTestMessageQueue called');
+            await interaction.reply({ 
+                content: '📬 Testing message queue system...', 
+                ephemeral: true 
+            });
+
+            if (!this.messageQueue) {
+                await interaction.editReply({ 
+                    content: '❌ Message queue not initialized', 
+                    ephemeral: true 
+                });
+                return;
+            }
+
+            // Test queuing a message
+            const testMessage = {
+                type: 'custom_channel',
+                target_type: 'channel',
+                target_id: config.discord.notificationChannelId,
+                message_data: JSON.stringify({
+                    content: '🧪 **Test Message Queue**\n\nThis message was queued and processed through the message queue system. If you see this, the queue is working correctly!'
+                }),
+                priority: 1
+            };
+
+            const success = await this.messageQueue.addMessage(testMessage);
+            
+            if (success) {
+                await interaction.editReply({ 
+                    content: '✅ Test message queued successfully! Check the notification channel in a few seconds.', 
+                    ephemeral: true 
+                });
+                
+                // Log the test
+                if (this.logger) {
+                    await this.logger.logEvent('Message Queue Test', 'Test message queued successfully', '#00ff00');
+                }
+            } else {
+                await interaction.editReply({ 
+                    content: '❌ Failed to queue test message', 
+                    ephemeral: true 
+                });
+            }
+
+        } catch (error) {
+            console.error('❌ Test message queue error:', error);
+            if (this.logger) {
+                await this.logger.logError(error, 'Test Message Queue');
+            }
+            await interaction.editReply({ 
+                content: `❌ Failed to test message queue: ${error.message}`, 
                 ephemeral: true 
             });
         }
