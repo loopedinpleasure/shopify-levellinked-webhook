@@ -3,9 +3,10 @@ const config = require('../config');
 const db = require('../database/db');
 
 class ShopifyWebhooks {
-    constructor(client, logger) {
+    constructor(client, logger, messageQueue) {
         this.client = client;
         this.logger = logger;
+        this.messageQueue = messageQueue;
         this.webhookSecret = config.shopify.webhookSecret;
     }
 
@@ -85,23 +86,41 @@ class ShopifyWebhooks {
             const { createOrderEmbed, getOrderReactions } = require('../discord/embeds');
             const embed = await createOrderEmbed(orderData, product, category);
 
-            // Send notification to channel
-            const channel = this.client.channels.cache.get(config.discord.notificationChannelId);
-            if (channel) {
-                const message = await channel.send({ embeds: [embed] });
+            // Queue notification to channel instead of sending directly
+            if (this.messageQueue) {
+                await this.messageQueue.addMessage({
+                    type: 'order',
+                    target_type: 'channel',
+                    target_id: config.discord.notificationChannelId,
+                    message_data: JSON.stringify({ embeds: [embed] }),
+                    priority: 2 // High priority for order notifications
+                });
                 
-                // Add automatic reactions after 15 seconds
-                setTimeout(async () => {
-                    try {
-                        const reactions = getOrderReactions();
-                        for (const reaction of reactions) {
-                            await message.react(reaction);
+                console.log(`✅ Order notification queued for channel`);
+            } else {
+                console.warn('❌ Message queue not available, sending directly');
+                // Fallback to direct sending if message queue is not available
+                const channel = this.client.channels.cache.get(config.discord.notificationChannelId);
+                if (channel) {
+                    const message = await channel.send({ embeds: [embed] });
+                    
+                    // Add automatic reactions after 15 seconds
+                    setTimeout(async () => {
+                        try {
+                            const reactions = getOrderReactions();
+                            for (const reaction of reactions) {
+                                await message.react(reaction);
+                            }
+                            console.log(`✅ Added ${reactions.length} reactions to order notification`);
+                        } catch (error) {
+                            console.error('❌ Failed to add reactions:', error);
                         }
-                        console.log(`✅ Added ${reactions.length} reactions to order notification`);
-                    } catch (error) {
-                        console.error('❌ Failed to add reactions:', error);
-                    }
-                }, 15000); // 15 second delay
+                    }, 15000); // 15 second delay
+                    
+                    console.log(`✅ Order notification sent to channel (fallback)`);
+                } else {
+                    console.warn('❌ Notification channel not found');
+                }
             }
 
             // Log order processing
