@@ -711,12 +711,21 @@ class ShopifyDiscordBot {
         try {
             // Get current setting
             const currentSetting = await db.get('SELECT value FROM settings WHERE key = ?', ['orders_enabled']);
-            const newValue = currentSetting ? (currentSetting.value === 'true' ? 'false' : 'true') : 'true';
             
-            // Update setting
-            await db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ['orders_enabled', newValue]);
+            // If setting doesn't exist, create it with default value 'true'
+            if (!currentSetting) {
+                await db.run('INSERT INTO settings (key, value) VALUES (?, ?)', ['orders_enabled', 'true']);
+                const newValue = 'false'; // Toggle to disabled
+                await db.run('UPDATE settings SET value = ? WHERE key = ?', [newValue, 'orders_enabled']);
+            } else {
+                const newValue = currentSetting.value === 'true' ? 'false' : 'true';
+                await db.run('UPDATE settings SET value = ? WHERE key = ?', [newValue, 'orders_enabled']);
+            }
             
-            const status = newValue === 'true' ? '✅ ENABLED' : '❌ DISABLED';
+            // Get the final value to display
+            const finalSetting = await db.get('SELECT value FROM settings WHERE key = ?', ['orders_enabled']);
+            const status = finalSetting.value === 'true' ? '✅ ENABLED' : '❌ DISABLED';
+            
             await interaction.reply({ 
                 content: `🛍️ Order notifications: **${status}**`, 
                 ephemeral: true 
@@ -724,7 +733,7 @@ class ShopifyDiscordBot {
 
             // Log the change
             if (this.logger) {
-                await this.logger.sendStatusUpdate('Orders Toggled', `Order notifications ${newValue === 'true' ? 'enabled' : 'disabled'}`, newValue === 'true' ? '#00ff00' : '#ff0000');
+                await this.logger.sendStatusUpdate('Orders Toggled', `Order notifications ${finalSetting.value === 'true' ? 'enabled' : 'disabled'}`, finalSetting.value === 'true' ? '#00ff00' : '#ff0000');
             }
 
         } catch (error) {
@@ -741,12 +750,21 @@ class ShopifyDiscordBot {
         try {
             // Get current setting
             const currentSetting = await db.get('SELECT value FROM settings WHERE key = ?', ['auto_dm_enabled']);
-            const newValue = currentSetting ? (currentSetting.value === 'true' ? 'false' : 'true') : 'true';
             
-            // Update setting
-            await db.run('INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)', ['auto_dm_enabled', newValue]);
+            // If setting doesn't exist, create it with default value 'false'
+            if (!currentSetting) {
+                await db.run('INSERT INTO settings (key, value) VALUES (?, ?)', ['auto_dm_enabled', 'false']);
+                const newValue = 'true'; // Toggle to enabled
+                await db.run('UPDATE settings SET value = ? WHERE key = ?', [newValue, 'auto_dm_enabled']);
+            } else {
+                const newValue = currentSetting.value === 'true' ? 'false' : 'true';
+                await db.run('UPDATE settings SET value = ? WHERE key = ?', [newValue, 'auto_dm_enabled']);
+            }
             
-            const status = newValue === 'true' ? '✅ ENABLED' : '❌ DISABLED';
+            // Get the final value to display
+            const finalSetting = await db.get('SELECT value FROM settings WHERE key = ?', ['auto_dm_enabled']);
+            const status = finalSetting.value === 'true' ? '✅ ENABLED' : '❌ DISABLED';
+            
             await interaction.reply({ 
                 content: `⏰ Auto-DM system: **${status}**`, 
                 ephemeral: true 
@@ -754,7 +772,7 @@ class ShopifyDiscordBot {
 
             // Log the change
             if (this.logger) {
-                await this.logger.sendStatusUpdate('Auto-DM Toggled', `Auto-DM system ${newValue === 'true' ? 'enabled' : 'disabled'}`, newValue === 'true' ? '#00ff00' : '#ff0000');
+                await this.logger.sendStatusUpdate('Auto-DM Toggled', `Auto-DM system ${finalSetting.value === 'true' ? 'enabled' : 'disabled'}`, finalSetting.value === 'true' ? '#00ff00' : '#ff0000');
             }
 
         } catch (error) {
