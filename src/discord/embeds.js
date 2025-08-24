@@ -84,6 +84,11 @@ function createPrimaryPlatformEmbed() {
                 .setEmoji('📧')
                 .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
+                .setCustomId('test_message_queue')
+                .setLabel('📬 Test Queue')
+                .setEmoji('📬')
+                .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
                 .setCustomId('export_ai_data')
                 .setLabel('🤖 Export for AI')
                 .setEmoji('🤖')
@@ -291,6 +296,36 @@ function createHealthCheckEmbed(healthData) {
             value: healthData.lastOrder,
             inline: false
         });
+    }
+
+    // Add message queue status
+    if (healthData.messageQueue) {
+        const queueStatus = healthData.messageQueue.status === 'operational' ? '✅ Operational' : '❌ Not Initialized';
+        embed.addFields(
+            {
+                name: '📬 Message Queue',
+                value: queueStatus,
+                inline: true
+            },
+            {
+                name: '⏳ Pending',
+                value: healthData.messageQueue.pending.toString(),
+                inline: true
+            },
+            {
+                name: '✅ Sent',
+                value: healthData.messageQueue.sent.toString(),
+                inline: true
+            }
+        );
+        
+        if (healthData.messageQueue.failed > 0) {
+            embed.addFields({
+                name: '❌ Failed',
+                value: healthData.messageQueue.failed.toString(),
+                inline: true
+            });
+        }
     }
 
     return embed;
