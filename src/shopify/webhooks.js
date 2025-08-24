@@ -240,6 +240,8 @@ class ShopifyWebhooks {
 
                 case 'orders/fulfilled':
                     console.log(`✅ Order ${body.order_number} fulfilled`);
+                    // Send notification to main channel just like order created
+                    await this.handleOrderCreated(body);
                     if (this.logger) {
                         await this.logger.sendStatusUpdate('Order Fulfilled', `Order ${body.order_number} has been fulfilled`, '#00ff00');
                     }
