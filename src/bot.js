@@ -25,6 +25,9 @@ class ShopifyDiscordBot {
         this.app = express();
         this.app.use(express.json());
 
+        // Initialize database
+        this.db = db;
+
         // Initialize Shopify webhooks handler
         this.shopifyWebhooks = null;
 
@@ -33,6 +36,9 @@ class ShopifyDiscordBot {
 
         // Initialize message queue
         this.messageQueue = null;
+
+        // Initialize analytics
+        this.analytics = null;
 
         // Bot state
         this.isReady = false;
@@ -76,10 +82,45 @@ class ShopifyDiscordBot {
 
         // Button interactions
         this.client.on(Events.InteractionCreate, async (interaction) => {
-            if (interaction.isButton()) {
-                await this.handleButtonInteraction(interaction);
-            } else if (interaction.isModalSubmit()) {
-                await this.handleModalSubmit(interaction);
+            try {
+                console.log(`🔍 DEBUG: Interaction received - Type: ${interaction.type}, CustomId: ${interaction.customId}`);
+                
+                if (interaction.isButton()) {
+                    console.log(`🔍 DEBUG: Button interaction detected: ${interaction.customId}`);
+                    
+                    // Handle opt-out button separately (no permissions required)
+                                    if (interaction.customId === 'opt_out_marketing') {
+                    console.log(`🔍 DEBUG: Routing opt-out button to handleOptOutMarketing`);
+                    console.log(`🔍 DEBUG: Interaction details:`, {
+                        id: interaction.id,
+                        type: interaction.type,
+                        userId: interaction.user?.id,
+                        memberId: interaction.member?.id,
+                        guildId: interaction.guildId
+                    });
+                    await this.handleOptOutMarketing(interaction);
+                    return; // Ensure we exit early
+                } else {
+                        console.log(`🔍 DEBUG: Routing other button to handleButtonInteraction`);
+                        // All other buttons require server owner permissions
+                        await this.handleButtonInteraction(interaction);
+                    }
+                } else if (interaction.isModalSubmit()) {
+                    console.log(`🔍 DEBUG: Modal submit interaction detected`);
+                    await this.handleModalSubmit(interaction);
+                }
+            } catch (error) {
+                console.error('❌ Error in interaction handler:', error);
+                try {
+                    if (interaction.isRepliable()) {
+                        await interaction.reply({
+                            content: '❌ An error occurred while processing your request. Please try again.',
+                            ephemeral: true
+                        });
+                    }
+                } catch (replyError) {
+                    console.error('❌ Failed to send error reply:', replyError);
+                }
             }
         });
     }
@@ -140,8 +181,19 @@ class ShopifyDiscordBot {
             console.log('🚀 Initializing bot...');
 
             // Initialize database
-            await db.init();
+            await this.db.init();
             console.log('✅ Database initialized');
+            
+            // Ensure database tables exist
+            try {
+                const { initializeDatabase } = require('./database/init');
+                await initializeDatabase();
+                console.log('✅ Database tables created/verified');
+            } catch (error) {
+                console.warn('⚠️ Database table creation failed, some features may not work:', error);
+                console.log('💡 Please click the "🗄️ Init Database" button in the admin panel to create tables manually');
+                console.log('💡 This is required for the bot to function properly');
+            }
 
             // Initialize logger
             this.logger = new BotLogger(this.client);
@@ -160,13 +212,21 @@ class ShopifyDiscordBot {
             await this.createAdminPanels();
             console.log('✅ Admin panels created');
 
-            // Start auto-DM processor
-            this.startAutoDMProcessor();
-            console.log('✅ Auto-DM processor started');
+            // Start auto-DM processor (with error handling)
+            try {
+                this.startAutoDMProcessor();
+                console.log('✅ Auto-DM processor started');
+            } catch (error) {
+                console.warn('⚠️ Auto-DM processor failed to start:', error);
+            }
 
-            // Process any messages that were queued while bot was offline
-            await this.messageQueue.processOfflineMessages();
-            console.log('✅ Offline message processing completed');
+            // Process any messages that were queued while bot was offline (with error handling)
+            try {
+                await this.messageQueue.processOfflineMessages();
+                console.log('✅ Offline message processing completed');
+            } catch (error) {
+                console.warn('⚠️ Offline message processing failed:', error);
+            }
 
             // Schedule daily and weekly summaries
             this.scheduleSummaries();
@@ -178,6 +238,10 @@ class ShopifyDiscordBot {
             // Mark bot as ready
             this.isReady = true;
             console.log('🎉 Bot fully initialized and ready!');
+            console.log('💡 Next steps:');
+            console.log('   1. Check the admin panel in Discord');
+            console.log('   2. Click "🗄️ Init Database" to create required tables');
+            console.log('   3. Use "❤️ Health Check" to verify system status');
 
         } catch (error) {
             console.error('❌ Bot initialization failed:', error);
@@ -240,21 +304,15 @@ class ShopifyDiscordBot {
         try {
             console.log(`🔍 DEBUG: trackNewMember called for ${member.user.tag} (${member.user.id})`);
             
-            const query = `
-                INSERT OR REPLACE INTO member_tracking (
-                    user_id, username, joined_at, is_verified, has_closed_dms_role, still_in_server
-                ) VALUES (?, ?, datetime('now'), ?, ?, TRUE)
-            `;
-            
-            const isVerified = member.roles.cache.has(process.env.VERIFIED_ROLE_ID);
-            const hasClosedDms = member.roles.cache.has(process.env.CLOSED_DMS_ROLE_ID);
+            const isVerified = member.roles.cache.has(config.discord.verifiedRoleId);
+            const hasClosedDms = member.roles.cache.has(config.discord.closedDmsRoleId);
             
             console.log(`🔍 DEBUG: Member verification status:`, isVerified);
             console.log(`🔍 DEBUG: Member has closed DMs role:`, hasClosedDms);
-            console.log(`🔍 DEBUG: Looking for verified role ID:`, process.env.VERIFIED_ROLE_ID);
-            console.log(`🔍 DEBUG: Looking for closed DMs role ID:`, process.env.CLOSED_DMS_ROLE_ID);
+            console.log(`🔍 DEBUG: Looking for verified role ID:`, config.discord.verifiedRoleId);
+            console.log(`🔍 DEBUG: Looking for closed DMs role ID:`, config.discord.closedDmsRoleId);
             
-            await this.db.run(query, [member.user.id, member.user.tag, isVerified, hasClosedDms]);
+            await this.db.trackMember(member.user.id, member.user.tag, isVerified, hasClosedDms);
             console.log(`🔍 DEBUG: Member tracking data inserted for ${member.user.id}`);
 
             // Schedule auto-DM for 65 minutes later if not closed DMs
@@ -282,7 +340,7 @@ class ShopifyDiscordBot {
     // Mark member as left
     async markMemberAsLeft(userId) {
         try {
-            await db.updateMemberStatus(userId, { still_in_server: false });
+            await this.db.updateMemberStatus(userId, { still_in_server: false });
             console.log(`👋 Member marked as left: ${userId}`);
 
             // Log member activity
@@ -314,7 +372,7 @@ class ShopifyDiscordBot {
 
             // Update closed DMs status
             if (hadClosedDms !== hasClosedDms) {
-                await db.updateMemberStatus(userId, { has_closed_dms_role: hasClosedDms });
+                await this.db.updateMemberStatus(userId, { has_closed_dms_role: hasClosedDms });
                 console.log(`🔒 Member ${userId} closed DMs role: ${hasClosedDms}`);
 
                 // Log role change
@@ -327,7 +385,7 @@ class ShopifyDiscordBot {
 
             // Update verification status
             if (wasVerified !== isVerified) {
-                await db.updateMemberStatus(userId, { is_verified: isVerified });
+                await this.db.updateMemberStatus(userId, { is_verified: isVerified });
                 console.log(`✅ Member ${userId} verification: ${isVerified}`);
 
                 // Log verification change
@@ -456,10 +514,10 @@ https://levellinked.myshopify.com/`;
         }
 
                 // Mark as sent
-                await this.db.run(
-                    'UPDATE member_tracking SET welcome_dm_sent = TRUE, dm_sent_at = datetime("now") WHERE user_id = ?',
-                    [userId]
-                );
+                await this.db.updateMemberStatus(userId, { 
+                    welcome_dm_sent: true, 
+                    dm_sent_at: new Date().toISOString() 
+                });
                 
                 console.log(`🔍 DEBUG: Member tracking updated for ${userId}`);
                 
@@ -533,14 +591,14 @@ https://levellinked.myshopify.com/`;
         setInterval(async () => {
             try {
                 // Check if auto-DM is enabled in settings
-                const setting = await db.get('SELECT value FROM settings WHERE key = ?', ['auto_dm_enabled']);
+                const setting = await this.db.get('SELECT value FROM settings WHERE key = ?', ['auto_dm_enabled']);
                 const isEnabled = setting && setting.value === 'true';
                 
                 if (!isEnabled) {
                     return; // Skip if not enabled
                 }
                 
-                const eligibleMembers = await db.getMembersForAutoDM();
+                const eligibleMembers = await this.db.getMembersForAutoDM();
                 
                 for (const member of eligibleMembers.slice(0, config.features.autoDm.maxPerHour)) {
                     await this.processAutoDM(member.user_id);
@@ -548,6 +606,12 @@ https://levellinked.myshopify.com/`;
                     await new Promise(resolve => setTimeout(resolve, 1000));
                 }
             } catch (error) {
+                // Handle database table errors gracefully
+                if (error.message && error.message.includes('no such table')) {
+                    console.log('ℹ️ Auto-DM processor waiting for database tables to be created...');
+                    return; // Skip processing until tables exist
+                }
+                
                 console.error('❌ Auto-DM processor error:', error);
                 if (this.logger) {
                     await this.logger.logError(error, 'Auto-DM processor');
@@ -561,8 +625,21 @@ https://levellinked.myshopify.com/`;
         try {
             const { customId } = interaction;
 
-            // Check if user is server owner
-            if (interaction.member.id !== config.discord.serverOwnerId) {
+            // Check if user is server owner - handle both guild and DM contexts
+            let userId;
+            if (interaction.member) {
+                userId = interaction.member.id;
+            } else if (interaction.user) {
+                userId = interaction.user.id;
+            } else {
+                await interaction.reply({ 
+                    content: '❌ Unable to identify user.', 
+                    ephemeral: true 
+                });
+                return;
+            }
+
+            if (userId !== config.discord.serverOwnerId) {
                 await interaction.reply({ 
                     content: '❌ Only the server owner can use these controls.', 
                     ephemeral: true 
@@ -733,14 +810,35 @@ https://levellinked.myshopify.com/`;
             
             // Add message queue status to health data
             if (this.messageQueue) {
-                const queueStats = await this.messageQueue.getQueueStats();
-                healthData.messageQueue = {
-                    status: 'operational',
-                    pending: queueStats.pending,
-                    sent: queueStats.sent,
-                    failed: queueStats.failed,
-                    total: queueStats.total
-                };
+                try {
+                    const queueStats = await this.messageQueue.getQueueStats();
+                    healthData.messageQueue = {
+                        status: 'operational',
+                        pending: queueStats.pending,
+                        sent: queueStats.sent,
+                        failed: queueStats.failed,
+                        total: queueStats.total
+                    };
+                } catch (error) {
+                    // Handle database table errors gracefully
+                    if (error.message && error.message.includes('no such table')) {
+                        healthData.messageQueue = {
+                            status: 'waiting_for_tables',
+                            pending: 0,
+                            sent: 0,
+                            failed: 0,
+                            total: 0
+                        };
+                    } else {
+                        healthData.messageQueue = {
+                            status: 'error',
+                            pending: 0,
+                            sent: 0,
+                            failed: 0,
+                            total: 0
+                        };
+                    }
+                }
             } else {
                 healthData.messageQueue = {
                     status: 'not_initialized',
@@ -895,6 +993,80 @@ https://levellinked.myshopify.com/`;
                 content: '❌ Failed to toggle auto-DM.', 
                 ephemeral: true 
             });
+        }
+    }
+
+    // Check if database is ready
+    async isDatabaseReady() {
+        try {
+            // Try to access a simple table to check if it exists
+            await this.db.get('SELECT 1 FROM settings LIMIT 1');
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    // Handle opt-out marketing button
+    async handleOptOutMarketing(interaction) {
+        try {
+            console.log(`🔍 DEBUG: handleOptOutMarketing called for interaction: ${interaction.id}`);
+            
+            // Get user ID from interaction (could be from DM or server)
+            const userId = interaction.user?.id;
+            if (!userId) {
+                console.error('❌ No user ID found in opt-out interaction');
+                await interaction.reply({
+                    content: '❌ Unable to identify user. Please try again.',
+                    ephemeral: true
+                });
+                return;
+            }
+            
+            console.log(`🔍 DEBUG: Processing opt-out for user: ${userId}`);
+            
+            // Check if database is ready
+            if (!(await this.isDatabaseReady())) {
+                console.log(`🔍 DEBUG: Database not ready, sending helpful message`);
+                await interaction.reply({
+                    content: '⚠️ Database is not ready yet. Please ask the server owner to click "🗄️ Init Database" in the admin panel.',
+                    ephemeral: true
+                });
+                return;
+            }
+            
+            // Update member tracking to mark as opted out
+            await this.db.updateMemberStatus(userId, { 
+                opt_out_at: new Date().toISOString() 
+            });
+            
+            console.log(`🔍 DEBUG: Member status updated for user: ${userId}`);
+            
+            // Send confirmation message
+            await interaction.reply({
+                content: '✅ You have successfully opted out of marketing messages. You will no longer receive promotional DMs from this bot.',
+                ephemeral: true
+            });
+            
+            console.log(`🔍 DEBUG: Confirmation sent to user: ${userId}`);
+            
+            // Log the opt-out
+            if (this.logger) {
+                await this.logger.log('info', `User ${userId} opted out of marketing messages`);
+            }
+            
+            console.log(`🔍 DEBUG: handleOptOutMarketing completed successfully for user: ${userId}`);
+            
+        } catch (error) {
+            console.error('❌ Error handling opt-out:', error);
+            try {
+                await interaction.reply({
+                    content: '❌ An error occurred while processing your opt-out request. Please try again.',
+                    ephemeral: true
+                });
+            } catch (replyError) {
+                console.error('❌ Failed to send error reply:', replyError);
+            }
         }
     }
 
