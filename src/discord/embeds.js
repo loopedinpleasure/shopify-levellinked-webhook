@@ -271,6 +271,17 @@ function createStatisticsEmbed(stats) {
 
 // Create health check embed
 function createHealthCheckEmbed(healthData) {
+    // Ensure healthData is properly initialized
+    if (!healthData || typeof healthData !== 'object') {
+        healthData = {};
+    }
+    
+    // Ensure required properties exist
+    if (!healthData.status) healthData.status = 'unknown';
+    if (!healthData.uptime) healthData.uptime = 'Unknown';
+    if (!healthData.database) healthData.database = { status: 'unknown' };
+    if (!healthData.lastOrder) healthData.lastOrder = 'None';
+    
     const embed = new EmbedBuilder()
         .setTitle('❤️ Bot Health Check')
         .setDescription('System status and performance')
@@ -290,7 +301,10 @@ function createHealthCheckEmbed(healthData) {
         },
         {
             name: '💾 Database',
-            value: healthData.database ? '✅ Connected' : '❌ Disconnected',
+            value: healthData.database && healthData.database.status ? 
+                (healthData.database.status === 'operational' ? '✅ Connected' : 
+                 healthData.database.status === 'waiting_for_tables' ? '⏳ Waiting for Tables' :
+                 healthData.database.status === 'error' ? '❌ Error' : '❓ Unknown') : '❓ Unknown',
             inline: true
         }
     );
@@ -303,11 +317,11 @@ function createHealthCheckEmbed(healthData) {
         });
     }
 
-    // Add message queue status
-    if (healthData.messageQueue) {
+        // Add message queue status
+    if (healthData.messageQueue && typeof healthData.messageQueue === 'object') {
         let queueStatus;
         let statusColor;
-        
+
         switch (healthData.messageQueue.status) {
             case 'operational':
                 queueStatus = '✅ Operational';
@@ -325,7 +339,7 @@ function createHealthCheckEmbed(healthData) {
                 queueStatus = '❓ Unknown';
                 statusColor = '#ffaa00';
         }
-        
+
         embed.addFields(
             {
                 name: '📬 Message Queue',
@@ -334,12 +348,12 @@ function createHealthCheckEmbed(healthData) {
             },
             {
                 name: '⏳ Pending',
-                value: healthData.messageQueue.pending.toString(),
+                value: (healthData.messageQueue.pending ?? 0).toString(),
                 inline: true
             },
             {
                 name: '✅ Sent',
-                value: healthData.messageQueue.sent.toString(),
+                value: (healthData.messageQueue.sent ?? 0).toString(),
                 inline: true
             }
         );
@@ -347,11 +361,11 @@ function createHealthCheckEmbed(healthData) {
         if (healthData.messageQueue.failed > 0) {
             embed.addFields({
                 name: '❌ Failed',
-                value: healthData.messageQueue.failed.toString(),
+                value: (healthData.messageQueue.failed ?? 0).toString(),
                 inline: true
             });
         }
-        
+
         // Add helpful message if waiting for tables
         if (healthData.messageQueue.status === 'waiting_for_tables') {
             embed.addFields({
@@ -360,6 +374,13 @@ function createHealthCheckEmbed(healthData) {
                 inline: false
             });
         }
+    } else {
+        // Fallback when message queue data is not available
+        embed.addFields({
+            name: '📬 Message Queue',
+            value: '❓ Not Available',
+            inline: true
+        });
     }
 
     return embed;
