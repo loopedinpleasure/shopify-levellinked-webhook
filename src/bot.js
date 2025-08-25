@@ -806,7 +806,13 @@ https://levellinked.myshopify.com/`;
     // Handle health check
     async handleHealthCheck(interaction) {
         try {
-            const healthData = await this.getHealthStatus();
+            // Ensure healthData is properly initialized
+            let healthData = await this.getHealthStatus();
+            
+            // Ensure healthData is an object
+            if (!healthData || typeof healthData !== 'object') {
+                healthData = {};
+            }
             
             // Add message queue status to health data
             if (this.messageQueue) {
@@ -814,10 +820,10 @@ https://levellinked.myshopify.com/`;
                     const queueStats = await this.messageQueue.getQueueStats();
                     healthData.messageQueue = {
                         status: 'operational',
-                        pending: queueStats.pending,
-                        sent: queueStats.sent,
-                        failed: queueStats.failed,
-                        total: queueStats.total
+                        pending: queueStats.pending || 0,
+                        sent: queueStats.sent || 0,
+                        failed: queueStats.failed || 0,
+                        total: queueStats.total || 0
                     };
                 } catch (error) {
                     // Handle database table errors gracefully
@@ -849,10 +855,24 @@ https://levellinked.myshopify.com/`;
                 };
             }
             
-            const { createHealthCheckEmbed } = require('./discord/embeds');
-            const embed = createHealthCheckEmbed(healthData);
+            // Ensure all required properties exist
+            if (!healthData.discord) healthData.discord = { status: 'unknown' };
+            if (!healthData.shopify) healthData.shopify = { status: 'unknown' };
+            if (!healthData.database) healthData.database = { status: 'unknown' };
             
-            await interaction.reply({ embeds: [embed], ephemeral: true });
+            const { createHealthCheckEmbed } = require('./discord/embeds');
+            
+            try {
+                const embed = createHealthCheckEmbed(healthData);
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+            } catch (embedError) {
+                console.error('❌ Error creating health check embed:', embedError);
+                // Fallback to simple text response
+                await interaction.reply({ 
+                    content: `❤️ **Bot Health Check**\n\nStatus: ${healthData.status || 'unknown'}\nUptime: ${healthData.uptime || 'Unknown'}\nDatabase: ${healthData.database?.status || 'unknown'}\nMessage Queue: ${healthData.messageQueue?.status || 'unknown'}`,
+                    ephemeral: true 
+                });
+            }
         } catch (error) {
             console.error('❌ Health check error:', error);
             if (this.logger) {
@@ -922,20 +942,20 @@ https://levellinked.myshopify.com/`;
     async handleToggleOrders(interaction) {
         try {
             // Get current setting
-            const currentSetting = await db.get('SELECT value FROM settings WHERE key = ?', ['orders_enabled']);
+            const currentSetting = await this.db.get('SELECT value FROM settings WHERE key = ?', ['orders_enabled']);
             
             // If setting doesn't exist, create it with default value 'true'
             if (!currentSetting) {
-                await db.run('INSERT INTO settings (key, value) VALUES (?, ?)', ['orders_enabled', 'true']);
+                await this.db.run('INSERT INTO settings (key, value) VALUES (?, ?)', ['orders_enabled', 'true']);
                 const newValue = 'false'; // Toggle to disabled
-                await db.run('UPDATE settings SET value = ? WHERE key = ?', [newValue, 'orders_enabled']);
+                await this.db.run('UPDATE settings SET value = ? WHERE key = ?', [newValue, 'orders_enabled']);
             } else {
                 const newValue = currentSetting.value === 'true' ? 'false' : 'true';
-                await db.run('UPDATE settings SET value = ? WHERE key = ?', [newValue, 'orders_enabled']);
+                await this.db.run('UPDATE settings SET value = ? WHERE key = ?', [newValue, 'orders_enabled']);
             }
             
             // Get the final value to display
-            const finalSetting = await db.get('SELECT value FROM settings WHERE key = ?', ['orders_enabled']);
+            const finalSetting = await this.db.get('SELECT value FROM settings WHERE key = ?', ['orders_enabled']);
             const status = finalSetting.value === 'true' ? '✅ ENABLED' : '❌ DISABLED';
             
             await interaction.reply({ 
@@ -961,20 +981,20 @@ https://levellinked.myshopify.com/`;
     async handleToggleAutoDM(interaction) {
         try {
             // Get current setting
-            const currentSetting = await db.get('SELECT value FROM settings WHERE key = ?', ['auto_dm_enabled']);
+            const currentSetting = await this.db.get('SELECT value FROM settings WHERE key = ?', ['auto_dm_enabled']);
             
             // If setting doesn't exist, create it with default value 'false'
             if (!currentSetting) {
-                await db.run('INSERT INTO settings (key, value) VALUES (?, ?)', ['auto_dm_enabled', 'false']);
+                await this.db.run('INSERT INTO settings (key, value) VALUES (?, ?)', ['auto_dm_enabled', 'false']);
                 const newValue = 'true'; // Toggle to enabled
-                await db.run('UPDATE settings SET value = ? WHERE key = ?', [newValue, 'auto_dm_enabled']);
+                await this.db.run('UPDATE settings SET value = ? WHERE key = ?', [newValue, 'auto_dm_enabled']);
             } else {
                 const newValue = currentSetting.value === 'true' ? 'false' : 'true';
-                await db.run('UPDATE settings SET value = ? WHERE key = ?', [newValue, 'auto_dm_enabled']);
+                await this.db.run('UPDATE settings SET value = ? WHERE key = ?', [newValue, 'auto_dm_enabled']);
             }
             
             // Get the final value to display
-            const finalSetting = await db.get('SELECT value FROM settings WHERE key = ?', ['auto_dm_enabled']);
+            const finalSetting = await this.db.get('SELECT value FROM settings WHERE key = ?', ['auto_dm_enabled']);
             const status = finalSetting.value === 'true' ? '✅ ENABLED' : '❌ DISABLED';
             
             await interaction.reply({ 
@@ -1416,7 +1436,7 @@ https://levellinked.myshopify.com/`;
             });
 
             // Get all member data
-            const members = await db.all(`
+            const members = await this.db.all(`
                 SELECT 
                     user_id,
                     username,
@@ -1510,7 +1530,7 @@ https://levellinked.myshopify.com/`;
             });
 
             // Get all order data
-            const orders = await db.all(`
+            const orders = await this.db.all(`
                 SELECT 
                     order_number,
                     customer_email,
@@ -1589,7 +1609,7 @@ https://levellinked.myshopify.com/`;
             });
 
             // Get all DM analytics data
-            const dmData = await db.all(`
+            const dmData = await this.db.all(`
                 SELECT 
                     metric_type,
                     source_type,
@@ -1959,7 +1979,7 @@ Focus on actionable insights that can improve business performance.`;
             const templateFooter = interaction.fields.getTextInputValue('template_footer') || null;
 
             // Save template to database
-            await db.run(`
+            await this.db.run(`
                 INSERT INTO embed_templates 
                 (name, template_type, title, description, image_url, footer_text, color, is_active, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
@@ -2292,7 +2312,7 @@ Focus on actionable insights that can improve business performance.`;
                 }
 
                 // Record analytics
-                await db.recordEvent('dm_sent', 'manual');
+                await this.analytics.recordEvent('dm_sent', 'manual');
 
                 console.log(`✅ DM sent to ${pendingData.username} (${pendingData.userId})`);
 
@@ -2362,7 +2382,7 @@ Focus on actionable insights that can improve business performance.`;
     async handleTemplateLibrary(interaction) {
         try {
             // Get all templates from database
-            const templates = await db.all('SELECT * FROM embed_templates ORDER BY created_at DESC');
+            const templates = await this.db.all('SELECT * FROM embed_templates ORDER BY created_at DESC');
             
             if (templates.length === 0) {
                 await interaction.reply({
@@ -2409,7 +2429,7 @@ Focus on actionable insights that can improve business performance.`;
     async handleSendTemplate(interaction) {
         try {
             // Get all templates from database
-            const templates = await db.all('SELECT * FROM embed_templates ORDER BY created_at DESC');
+            const templates = await this.db.all('SELECT * FROM embed_templates ORDER BY created_at DESC');
             
             if (templates.length === 0) {
                 await interaction.reply({
@@ -3222,7 +3242,7 @@ Focus on actionable insights that can improve business performance.`;
             await channel.send({ embeds: [templateEmbed] });
 
             // Update usage count
-            await db.run('UPDATE embed_templates SET usage_count = usage_count + 1 WHERE id = ?', [templateId]);
+            await this.db.run('UPDATE embed_templates SET usage_count = usage_count + 1 WHERE id = ?', [templateId]);
 
             // Update the interaction
             await interaction.update({
@@ -3237,7 +3257,7 @@ Focus on actionable insights that can improve business performance.`;
             }
 
             // Record analytics
-            await db.recordEvent('template_sent', 'channel');
+            await this.analytics.recordEvent('template_sent', 'channel');
 
             console.log(`✅ Template "${template.name}" sent to #${channel.name}`);
 
@@ -3312,7 +3332,7 @@ Focus on actionable insights that can improve business performance.`;
             }
 
             // Update usage count
-            await db.run('UPDATE embed_templates SET usage_count = usage_count + 1 WHERE id = ?', [templateId]);
+            await this.db.run('UPDATE embed_templates SET usage_count = usage_count + 1 WHERE id = ?', [templateId]);
 
             // Final update
             await interaction.editReply({
@@ -3327,7 +3347,7 @@ Focus on actionable insights that can improve business performance.`;
             }
 
             // Record analytics
-            await db.recordEvent('template_sent', 'all_members');
+            await this.analytics.recordEvent('template_sent', 'all_members');
 
             console.log(`✅ Template "${template.name}" sent to ${successCount} members`);
 
@@ -3403,7 +3423,7 @@ Focus on actionable insights that can improve business performance.`;
             }
 
             // Update usage count
-            await db.run('UPDATE embed_templates SET usage_count = usage_count + 1 WHERE id = ?', [templateId]);
+            await this.db.run('UPDATE embed_templates SET usage_count = usage_count + 1 WHERE id = ?', [templateId]);
 
             // Final update
             await interaction.editReply({
@@ -3418,7 +3438,7 @@ Focus on actionable insights that can improve business performance.`;
             }
 
             // Record analytics
-            await db.recordEvent('template_sent', 'verified_members');
+            await this.analytics.recordEvent('template_sent', 'verified_members');
 
             console.log(`✅ Template "${template.name}" sent to ${successCount} verified members`);
 
@@ -3473,7 +3493,7 @@ Focus on actionable insights that can improve business performance.`;
             }
 
             // Delete template from database
-            await db.run('DELETE FROM embed_templates WHERE id = ?', [templateId]);
+            await this.db.run('DELETE FROM embed_templates WHERE id = ?', [templateId]);
 
             // Log the deletion
             if (this.logger) {
@@ -3499,24 +3519,48 @@ Focus on actionable insights that can improve business performance.`;
     async getHealthStatus() {
         try {
             const uptime = Math.floor((Date.now() - this.startTime) / 1000);
-            const lastOrder = await db.get(`
-                SELECT order_number, created_at 
-                FROM orders 
-                ORDER BY created_at DESC 
-                LIMIT 1
-            `);
+            
+            // Check database connectivity
+            let databaseStatus = 'unknown';
+            let lastOrder = 'None';
+            
+            try {
+                if (this.db) {
+                    const lastOrderResult = await this.db.get(`
+                        SELECT order_number, created_at 
+                        FROM orders 
+                        ORDER BY created_at DESC 
+                        LIMIT 1
+                    `);
+                    lastOrder = lastOrderResult ? `${lastOrderResult.order_number} (${lastOrderResult.created_at})` : 'None';
+                    databaseStatus = 'operational';
+                } else {
+                    databaseStatus = 'not_initialized';
+                }
+            } catch (dbError) {
+                if (dbError.message && dbError.message.includes('no such table')) {
+                    databaseStatus = 'waiting_for_tables';
+                } else {
+                    databaseStatus = 'error';
+                }
+            }
 
             return {
                 status: 'healthy',
                 uptime: `${Math.floor(uptime / 3600)}h ${Math.floor((uptime % 3600) / 60)}m`,
-                database: true,
-                lastOrder: lastOrder ? `${lastOrder.order_number} (${lastOrder.created_at})` : 'None'
+                discord: { status: 'operational' },
+                shopify: { status: 'operational' },
+                database: { status: databaseStatus },
+                lastOrder: lastOrder
             };
         } catch (error) {
             return {
                 status: 'unhealthy',
                 error: error.message,
-                database: false
+                discord: { status: 'unknown' },
+                shopify: { status: 'unknown' },
+                database: { status: 'error' },
+                lastOrder: 'None'
             };
         }
     }
@@ -3530,30 +3574,30 @@ Focus on actionable insights that can improve business performance.`;
             const thisMonth = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
             // Get today's stats
-            const todayStats = await db.getDailyStats(today);
-            const yesterdayStats = await db.getDailyStats(yesterday);
+            const todayStats = await this.db.getDailyStats(today);
+            const yesterdayStats = await this.db.getDailyStats(yesterday);
             
             // Get member counts
-            const totalMembers = await db.get('SELECT COUNT(*) as count FROM member_tracking WHERE still_in_server = TRUE');
-            const verifiedMembers = await db.get('SELECT COUNT(*) as count FROM member_tracking WHERE still_in_server = TRUE AND is_verified = TRUE');
-            const newMembersToday = await db.get('SELECT COUNT(*) as count FROM member_tracking WHERE DATE(joined_at) = ?', [today]);
-            const newMembersWeek = await db.get('SELECT COUNT(*) as count FROM member_tracking WHERE DATE(joined_at) >= ?', [thisWeek]);
+            const totalMembers = await this.db.get('SELECT COUNT(*) as count FROM member_tracking WHERE still_in_server = TRUE');
+            const verifiedMembers = await this.db.get('SELECT COUNT(*) as count FROM member_tracking WHERE still_in_server = TRUE AND is_verified = TRUE');
+            const newMembersToday = await this.db.get('SELECT COUNT(*) as count FROM member_tracking WHERE DATE(joined_at) = ?', [today]);
+            const newMembersWeek = await this.db.get('SELECT COUNT(*) as count FROM member_tracking WHERE DATE(joined_at) >= ?', [thisWeek]);
             
             // Get order stats
-            const totalOrders = await db.get('SELECT COUNT(*) as count FROM orders');
-            const ordersToday = await db.get('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) = ?', [today]);
-            const ordersWeek = await db.get('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) >= ?', [thisWeek]);
-            const ordersMonth = await db.get('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) >= ?', [thisMonth]);
+            const totalOrders = await this.db.get('SELECT COUNT(*) as count FROM orders');
+            const ordersToday = await this.db.get('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) = ?', [today]);
+            const ordersWeek = await this.db.get('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) >= ?', [thisWeek]);
+            const ordersMonth = await this.db.get('SELECT COUNT(*) as count FROM orders WHERE DATE(created_at) >= ?', [thisMonth]);
             
             // Get DM stats
-            const totalDMs = await db.get('SELECT COUNT(*) as count FROM analytics WHERE metric_type = "dm_sent"');
-            const dmsToday = await db.get('SELECT COUNT(*) as count FROM analytics WHERE metric_type = "dm_sent" AND DATE(created_at) = ?', [today]);
-            const dmsWeek = await db.get('SELECT COUNT(*) as count FROM analytics WHERE metric_type = "dm_sent" AND DATE(created_at) >= ?', [thisWeek]);
+            const totalDMs = await this.db.get('SELECT COUNT(*) as count FROM analytics WHERE metric_type = "dm_sent"');
+            const dmsToday = await this.db.get('SELECT COUNT(*) as count FROM analytics WHERE metric_type = "dm_sent" AND DATE(created_at) = ?', [today]);
+            const dmsWeek = await this.db.get('SELECT COUNT(*) as count FROM analytics WHERE metric_type = "dm_sent" AND DATE(created_at) >= ?', [thisWeek]);
             
             // Get template usage
-            const totalTemplates = await db.get('SELECT COUNT(*) as count FROM embed_templates');
-            const activeTemplates = await db.get('SELECT COUNT(*) as count FROM embed_templates WHERE is_active = TRUE');
-            const totalTemplateSends = await db.get('SELECT SUM(usage_count) as total FROM embed_templates');
+            const totalTemplates = await this.db.get('SELECT COUNT(*) as count FROM embed_templates');
+            const activeTemplates = await this.db.get('SELECT COUNT(*) as count FROM embed_templates WHERE is_active = TRUE');
+            const totalTemplateSends = await this.db.get('SELECT SUM(usage_count) as total FROM embed_templates');
             
             // Calculate growth rates
             const memberGrowthRate = yesterdayStats.length > 0 ? 
