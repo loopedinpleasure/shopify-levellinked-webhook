@@ -266,7 +266,13 @@ class MessageQueue {
                 FROM message_queue
             `);
             
-            return stats || { total: 0, pending: 0, sent: 0, failed: 0 };
+            // Ensure all values are numbers, not null
+            return {
+                total: stats?.total || 0,
+                pending: stats?.pending || 0,
+                sent: stats?.sent || 0,
+                failed: stats?.failed || 0
+            };
         } catch (error) {
             console.error('❌ Failed to get queue stats:', error);
             return { total: 0, pending: 0, sent: 0, failed: 0 };
