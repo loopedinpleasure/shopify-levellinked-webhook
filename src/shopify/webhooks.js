@@ -94,7 +94,7 @@ class ShopifyWebhooks {
 
             // Create order notification message
             const { getOrderReactions } = require('../discord/embeds');
-            const orderMessage = `Someone ordered **${product.name}**!\n@https://levellinked.myshopify.com/products/${product.product_id}`;
+            const orderMessage = `Someone ordered **[${product.name}](https://levellinked.myshopify.com/products/${product.product_id})**!`;
 
             // Queue notification to channel instead of sending directly
             if (this.messageQueue) {
