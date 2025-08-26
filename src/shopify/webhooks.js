@@ -35,6 +35,13 @@ class ShopifyWebhooks {
         try {
             console.log('🛍️ Processing new order:', orderData.order_number);
 
+            // Check if order was already processed (prevent duplicates)
+            const isAlreadyProcessed = await db.isOrderProcessed(orderData.id);
+            if (isAlreadyProcessed) {
+                console.log('⚠️ Order already processed, skipping:', orderData.order_number);
+                return;
+            }
+
             // Track order in database
             await db.trackOrder({
                 id: orderData.id,
@@ -44,6 +51,9 @@ class ShopifyWebhooks {
                 currency: orderData.currency_code,
                 financial_status: orderData.financial_status
             });
+
+            // Mark order as processed
+            await db.markOrderProcessed(orderData.id, orderData.order_number, 'webhook');
 
             // Process each line item
             for (const lineItem of orderData.line_items) {
@@ -82,9 +92,9 @@ class ShopifyWebhooks {
             // Get category for product
             const category = await this.getProductCategory(product);
 
-            // Create order notification
-            const { createOrderEmbed, getOrderReactions } = require('../discord/embeds');
-            const embed = await createOrderEmbed(orderData, product, category);
+            // Create order notification message
+            const { getOrderReactions } = require('../discord/embeds');
+            const orderMessage = `Someone ordered **${product.name}**!\n@https://levellinked.myshopify.com/products/${product.product_id}`;
 
             // Queue notification to channel instead of sending directly
             if (this.messageQueue) {
@@ -92,7 +102,7 @@ class ShopifyWebhooks {
                     type: 'order',
                     target_type: 'channel',
                     target_id: config.discord.notificationChannelId,
-                    message_data: JSON.stringify({ embeds: [embed] }),
+                    message_data: JSON.stringify({ content: orderMessage }),
                     priority: 2 // High priority for order notifications
                 });
                 
@@ -102,7 +112,7 @@ class ShopifyWebhooks {
                 // Fallback to direct sending if message queue is not available
                 const channel = this.client.channels.cache.get(config.discord.notificationChannelId);
                 if (channel) {
-                    const message = await channel.send({ embeds: [embed] });
+                    const message = await channel.send({ content: orderMessage });
                     
                     // Add automatic reactions after 15 seconds
                     setTimeout(async () => {
@@ -122,6 +132,9 @@ class ShopifyWebhooks {
                     console.warn('❌ Notification channel not found');
                 }
             }
+
+            // Mark notification as sent
+            await db.markNotificationSent(orderData.id);
 
             // Log order processing
             if (this.logger) {
