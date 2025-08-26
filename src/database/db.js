@@ -151,6 +151,59 @@ class Database {
         ]);
     }
 
+    // Processed orders tracking methods
+    async markOrderProcessed(orderId, orderNumber, syncSource = 'webhook') {
+        const sql = `
+            INSERT OR IGNORE INTO processed_orders 
+            (shopify_order_id, order_number, sync_source, processed_at) 
+            VALUES (?, ?, ?, datetime('now'))
+        `;
+        return await this.run(sql, [orderId, orderNumber, syncSource]);
+    }
+
+    async isOrderProcessed(orderId) {
+        const result = await this.get(
+            'SELECT shopify_order_id FROM processed_orders WHERE shopify_order_id = ?', 
+            [orderId]
+        );
+        return !!result;
+    }
+
+    async getLastProcessedOrder() {
+        return await this.get(`
+            SELECT shopify_order_id, order_number, processed_at 
+            FROM processed_orders 
+            ORDER BY processed_at DESC 
+            LIMIT 1
+        `);
+    }
+
+    async getUnprocessedOrdersCount(sinceDate = null) {
+        let sql = `
+            SELECT COUNT(*) as count 
+            FROM processed_orders 
+            WHERE notification_sent = FALSE
+        `;
+        let params = [];
+        
+        if (sinceDate) {
+            sql += ' AND processed_at >= ?';
+            params.push(sinceDate.toISOString());
+        }
+        
+        const result = await this.get(sql, params);
+        return result ? result.count : 0;
+    }
+
+    async markNotificationSent(orderId) {
+        const sql = `
+            UPDATE processed_orders 
+            SET notification_sent = TRUE 
+            WHERE shopify_order_id = ?
+        `;
+        return await this.run(sql, [orderId]);
+    }
+
     // Analytics methods
     async recordEvent(metricType, sourceType, metadata = null, revenue = 0) {
         const sql = `
