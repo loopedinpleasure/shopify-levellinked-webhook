@@ -190,6 +190,16 @@ class DatabaseInitializer {
                 redeemed BOOLEAN DEFAULT FALSE,
                 redeemed_at DATETIME,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )`,
+
+            // Processed orders tracking table (for offline sync)
+            `CREATE TABLE IF NOT EXISTS processed_orders (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                shopify_order_id TEXT UNIQUE NOT NULL,
+                order_number TEXT NOT NULL,
+                processed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                notification_sent BOOLEAN DEFAULT FALSE,
+                sync_source TEXT DEFAULT 'webhook' -- 'webhook' or 'api_sync'
             )`
         ];
 
@@ -214,6 +224,8 @@ class DatabaseInitializer {
             'CREATE INDEX IF NOT EXISTS idx_analytics_metric ON analytics(metric_type)',
             'CREATE INDEX IF NOT EXISTS idx_orders_number ON orders(order_number)',
             'CREATE INDEX IF NOT EXISTS idx_orders_created ON orders(created_at)',
+            'CREATE INDEX IF NOT EXISTS idx_processed_orders_id ON processed_orders(shopify_order_id)',
+            'CREATE INDEX IF NOT EXISTS idx_processed_orders_number ON processed_orders(order_number)',
             'CREATE INDEX IF NOT EXISTS idx_polls_active ON polls(is_active)',
             'CREATE INDEX IF NOT EXISTS idx_giveaways_active ON giveaways(is_active)',
             'CREATE INDEX IF NOT EXISTS idx_referral_rewards_user ON referral_rewards(user_id)'
