@@ -5,11 +5,11 @@ const db = require('./database/db');
 const ShopifyWebhooks = require('./shopify/webhooks');
 const BotLogger = require('./utils/logger');
 const MessageQueue = require('./queue/messageQueue');
+const OfflineOrderSync = require('./shopify/sync');
 const { createPrimaryPlatformEmbed, createEngagementPlatformEmbed } = require('./discord/embeds');
 
 class ShopifyDiscordBot {
     constructor() {
-        // Initialize Discord client with all required intents
         this.client = new Client({
             intents: [
                 GatewayIntentBits.Guilds,
