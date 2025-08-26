@@ -31,8 +31,8 @@ class ShopifyDiscordBot {
         // Initialize Shopify webhooks handler
         this.shopifyWebhooks = null;
 
-        // Initialize logger
-        this.logger = null;
+        // Initialize offline order sync
+        this.offlineSync = null;
 
         // Initialize message queue
         this.messageQueue = null;
@@ -206,8 +206,8 @@ class ShopifyDiscordBot {
 
             // Initialize message queue
             this.messageQueue = new MessageQueue(this.client, this.logger);
-            console.log('✅ Message queue initialized');
-
+            this.offlineSync = new OfflineOrderSync(this.messageQueue, this.logger);
+            console.log(' Offline order sync initialized');
             // Create admin panels
             await this.createAdminPanels();
             console.log('✅ Admin panels created');
@@ -752,6 +752,19 @@ https://levellinked.myshopify.com/`;
                     break;
                 case 'send_to_role':
                     await this.handleSendToRole(interaction);
+                    break;
+
+                case 'sync_offline_orders':
+                    await this.handleSyncOfflineOrders(interaction);
+                    break;
+                case 'sync_stats':
+                    await this.handleSyncStats(interaction);
+                    break;
+                case 'confirm_sync_orders':
+                    await this.handleConfirmSyncOrders(interaction);
+                    break;
+                case 'cancel_sync_orders':
+                    await this.handleCancelSyncOrders(interaction);
                     break;
                 case 'cancel_send':
                     await this.handleCancelSend(interaction);
@@ -3712,6 +3725,31 @@ Focus on actionable insights that can improve business performance.`;
             console.error('❌ Pending data cleanup error:', error);
         }
     }
+
+    // Handle sync offline orders
+    async handleSyncOfflineOrders(interaction) {
+        const { handleSyncOfflineOrders } = require('./bot_sync_handlers');
+        await handleSyncOfflineOrders.call(this, interaction);
+    }
+
+    // Handle sync stats
+    async handleSyncStats(interaction) {
+        const { handleSyncStats } = require('./bot_sync_handlers');
+        await handleSyncStats.call(this, interaction);
+    }
+
+    // Handle confirm sync orders
+    async handleConfirmSyncOrders(interaction) {
+        const { handleConfirmSyncOrders } = require('./bot_sync_handlers');
+        await handleConfirmSyncOrders.call(this, interaction);
+    }
+
+    // Handle cancel sync orders
+    async handleCancelSyncOrders(interaction) {
+        const { handleCancelSyncOrders } = require('./bot_sync_handlers');
+        await handleCancelSyncOrders.call(this, interaction);
+    }
+}
 }
 
 // Create and start the bot
