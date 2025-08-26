@@ -3749,7 +3749,7 @@ Focus on actionable insights that can improve business performance.`;
         const { handleCancelSyncOrders } = require('./bot_sync_handlers');
         await handleCancelSyncOrders.call(this, interaction);
     }
-}
+
 }
 
 // Create and start the bot
