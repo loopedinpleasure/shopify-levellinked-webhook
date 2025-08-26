@@ -1,4 +1,5 @@
 const { shopifyApi, LATEST_API_VERSION } = require('@shopify/shopify-api');
+const { restResources } = require('@shopify/shopify-api/rest/admin/2024-01');
 const config = require('../config');
 
 class ShopifyAPIService {
@@ -12,7 +13,8 @@ class ShopifyAPIService {
             hostName: process.env.SHOPIFY_SHOP_URL?.replace('https://', '').replace('http://', '') || '',
             apiVersion: LATEST_API_VERSION,
             isEmbeddedApp: false,
-            isPrivateApp: true
+            isPrivateApp: true,
+            restResources
         });
     }
 
