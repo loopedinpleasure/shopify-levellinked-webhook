@@ -21,10 +21,11 @@
   "author": "Level Linked",
   "license": "MIT",
   "dependencies": {
+    "@shopify/shopify-api": "^11.14.1",
     "discord.js": "^14.14.1",
+    "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "sqlite3": "^5.1.6",
-    "dotenv": "^16.3.1"
+    "sqlite3": "^5.1.6"
   },
   "devDependencies": {
     "nodemon": "^3.0.2"
