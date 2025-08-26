@@ -136,7 +136,7 @@ class OfflineOrderSync {
             const category = await this.getProductCategory(product);
 
             // Create order notification message
-            const orderMessage = `Someone ordered **${product.name}**!\n@https://levellinked.myshopify.com/products/${product.product_id}`;
+            const orderMessage = `Someone ordered **[${product.name}](https://levellinked.myshopify.com/products/${product.product_id})**!`;
 
             // Queue notification to channel
             if (this.messageQueue) {
