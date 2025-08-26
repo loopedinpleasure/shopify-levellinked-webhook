@@ -105,7 +105,21 @@ function createPrimaryPlatformEmbed() {
                 .setStyle(ButtonStyle.Secondary)
         );
 
-    return { embeds: [embed], components: [toggleButtons, messageButtons, managementButtons, additionalButtons] };
+    const syncButtons = new ActionRowBuilder()
+        .addComponents(
+            new ButtonBuilder()
+                .setCustomId('sync_offline_orders')
+                .setLabel('🔄 Sync Offline Orders')
+                .setEmoji('🔄')
+                .setStyle(ButtonStyle.Primary),
+            new ButtonBuilder()
+                .setCustomId('sync_stats')
+                .setLabel('📊 Sync Stats')
+                .setEmoji('📊')
+                .setStyle(ButtonStyle.Secondary)
+        );
+
+    return { embeds: [embed], components: [toggleButtons, messageButtons, managementButtons, additionalButtons, syncButtons] };
 }
 
 // Engagement Platform for community features
