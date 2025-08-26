@@ -4,10 +4,10 @@ const config = require('../config');
 class ShopifyAPIService {
     constructor() {
         // For private apps, we use the access token directly
-        // No need for API key/secret pairs - the access token is sufficient
+        // The Shopify API library requires these values even if empty
         this.api = shopifyApi({
-            apiKey: '', // Not needed for private app with access token
-            apiSecretKey: '', // Not needed for private app with access token
+            apiKey: 'dummy_key', // Required by library but not used
+            apiSecretKey: 'dummy_secret', // Required by library but not used
             scopes: ['read_orders'],
             hostName: process.env.SHOPIFY_SHOP_URL?.replace('https://', '').replace('http://', '') || '',
             apiVersion: LATEST_API_VERSION,
