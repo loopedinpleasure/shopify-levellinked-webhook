@@ -1,6 +1,5 @@
 const { shopifyApi, LATEST_API_VERSION } = require('@shopify/shopify-api');
 const { restResources } = require('@shopify/shopify-api/rest/admin/2025-07');
-const { Node } = require('@shopify/shopify-api/adapters/node');
 const config = require('../config');
 
 class ShopifyAPIService {
@@ -15,8 +14,7 @@ class ShopifyAPIService {
             apiVersion: LATEST_API_VERSION,
             isEmbeddedApp: false,
             isPrivateApp: true,
-            restResources,
-            runtimeAdapter: new Node()
+            restResources
         });
     }
 
