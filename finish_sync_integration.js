@@ -67,3 +67,6 @@ fs.writeFileSync(botFilePath, content, 'utf8');
 
 console.log('✅ Successfully added sync functionality to bot.js');
 console.log('🎉 Offline order sync integration is now complete!');
+
+
+
