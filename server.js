@@ -7,16 +7,42 @@ console.log('🚀 Starting Advanced Shopify Discord Bot...');
 const bot = require('./src/bot');
 
 // Self-ping mechanism to prevent Render from sleeping
-const RENDER_URL = process.env.RENDER_EXTERNAL_URL || process.env.RENDER_SERVICE_URL;
 const PING_INTERVAL = 14 * 60 * 1000; // 14 minutes in milliseconds
 
 function setupSelfPing() {
-  if (!RENDER_URL) {
-    console.log('⚠️ No RENDER_URL found, self-ping disabled (probably running locally)');
+  // Try multiple ways to get the service URL
+  let serviceUrl = process.env.RENDER_EXTERNAL_URL || 
+                   process.env.RENDER_SERVICE_URL || 
+                   process.env.RENDER_EXTERNAL_HOSTNAME;
+  
+  // If we have RENDER_SERVICE_NAME, construct the URL
+  if (!serviceUrl && process.env.RENDER_SERVICE_NAME) {
+    serviceUrl = `https://${process.env.RENDER_SERVICE_NAME}.onrender.com`;
+  }
+  
+  // Fallback: if we're on Render but don't have the URL, try the known pattern
+  if (!serviceUrl && (process.env.RENDER || process.env.IS_PULL_REQUEST !== undefined)) {
+    // Known URL from logs: https://shopify-levellinked-webhook.onrender.com
+    serviceUrl = 'https://shopify-levellinked-webhook.onrender.com';
+    console.log('🔧 Using fallback URL for self-ping');
+  }
+  
+  // Debug logging
+  console.log('🔍 Environment check:');
+  console.log(`   RENDER_EXTERNAL_URL: ${process.env.RENDER_EXTERNAL_URL || 'not set'}`);
+  console.log(`   RENDER_SERVICE_URL: ${process.env.RENDER_SERVICE_URL || 'not set'}`);
+  console.log(`   RENDER_EXTERNAL_HOSTNAME: ${process.env.RENDER_EXTERNAL_HOSTNAME || 'not set'}`);
+  console.log(`   RENDER_SERVICE_NAME: ${process.env.RENDER_SERVICE_NAME || 'not set'}`);
+  console.log(`   RENDER: ${process.env.RENDER || 'not set'}`);
+  console.log(`   IS_PULL_REQUEST: ${process.env.IS_PULL_REQUEST || 'not set'}`);
+  console.log(`   Resolved service URL: ${serviceUrl || 'not found'}`);
+  
+  if (!serviceUrl) {
+    console.log('⚠️ No service URL found, self-ping disabled (probably running locally)');
     return;
   }
 
-  const pingUrl = `${RENDER_URL}/health`;
+  const pingUrl = `${serviceUrl}/health`;
   
   console.log(`🏓 Setting up self-ping to ${pingUrl} every 14 minutes`);
   
